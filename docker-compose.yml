@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # ─── Banco de Dados PostgreSQL ─────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vinilsuno-db
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-vinilsuno}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vinilsuno2024}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Backend API + Frontend (Build Estático) ───────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vinilsuno-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-5043}:5043"
+    environment:
+      NODE_ENV: production
+      PORT: 5043
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-vinilsuno2024}
+      DB_NAME: ${DB_NAME:-vinilsuno}
+      BASE_URL: ${BASE_URL:-http://localhost:5043}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── Nginx Reverse Proxy (Produção) ───────────────
+  nginx:
+    image: nginx:alpine
+    container_name: vinilsuno-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+    driver: local
+  uploads:
+    driver: local

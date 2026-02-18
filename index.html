@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vinil Suno</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                DEFAULT: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+                light: 'rgb(var(--brand-light-rgb) / <alpha-value>)',
+                dark: 'rgb(var(--brand-secondary-rgb) / <alpha-value>)',
+                bg: '#050505',
+                surface: '#121212',
+                highlight: '#1E1E1E'
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 400ms cubic-bezier(0.2, 0, 0, 1) forwards',
+              'scale-in': 'scaleIn 350ms cubic-bezier(0.2, 0, 0, 1) forwards',
+              'spin-slow': 'spin 8s linear infinite',
+            },
+            keyframes: {
+              fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+              scaleIn: { '0%': { opacity: '0', transform: 'scale(0.95)' }, '100%': { opacity: '1', transform: 'scale(1)' } }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --brand-primary-rgb: 123 30 58;
+        --brand-light-rgb: 158 42 77;
+        --brand-secondary-rgb: 90 22 43;
+        --transition-speed: 0.4s;
+      }
+
+      body {
+        font-family: 'Inter', sans-serif;
+        transition: background-color var(--transition-speed) ease, color var(--transition-speed) ease;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(123, 30, 58, 0.2); border-radius: 10px; }
+      .dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
+
+      /* Glass Styles - Dark (Default) */
+      .glass-sidebar {
+        background: rgba(10, 10, 10, 0.8);
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .glass-player {
+        background: rgba(15, 15, 15, 0.85);
+        backdrop-filter: blur(24px);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .glass-input {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      /* Glass Styles - Light Mode Overrides */
+      .light .glass-sidebar {
+        background: rgba(255, 255, 255, 0.7);
+        border-right: 1px solid rgba(0, 0, 0, 0.05);
+      }
+      .light .glass-player {
+        background: rgba(255, 255, 255, 0.8);
+        border-top: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.05);
+      }
+      .light .glass-card {
+        background: rgba(0, 0, 0, 0.02);
+        border: 1px solid rgba(0, 0, 0, 0.04);
+      }
+      .light .glass-input {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        color: #1e293b;
+      }
+
+      input[type=range] { -webkit-appearance: none; background: transparent; }
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%;
+        background: white; cursor: pointer; border: 2px solid rgb(var(--brand-primary-rgb));
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      }
+      
+      .active-press:active { transform: scale(0.96); }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-slate-50 dark:bg-[#050505] text-slate-900 dark:text-zinc-100">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
