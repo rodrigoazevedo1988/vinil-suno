@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutGrid, List, ArrowLeft, Disc } from 'lucide-react';
+import { LayoutGrid, List, ArrowLeft, Disc, Clock, Music2 } from 'lucide-react';
 import { Song, Playlist } from '../types';
 import MusicCard from './MusicCard';
 import SongListTable from './SongListTable';
@@ -18,6 +18,13 @@ interface GenresViewProps {
     isAdmin?: boolean;
     onEditCMS?: (song: Song) => void;
 }
+
+const formatTotalTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h} h ${m} min`;
+    return `${m} min`;
+};
 
 const GenresView: React.FC<GenresViewProps> = ({
     songs,
@@ -82,6 +89,17 @@ const GenresView: React.FC<GenresViewProps> = ({
                     <div className="flex flex-col">
                         <span className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500">GÊNERO</span>
                         <h1 className="text-4xl font-black tracking-tight">{selectedGenre}</h1>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-zinc-500 font-medium">
+                            <div className="flex items-center gap-1">
+                                <Music2 className="w-4 h-4" />
+                                <span>{genreSongs.length} músicas</span>
+                            </div>
+                            <div className="w-1 h-1 rounded-full bg-zinc-600" />
+                            <div className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                <span>{formatTotalTime(genreSongs.reduce((acc, s) => acc + s.duration, 0))}</span>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="ml-auto flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">

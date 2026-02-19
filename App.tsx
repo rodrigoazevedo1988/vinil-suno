@@ -66,6 +66,13 @@ const BackgroundManager: React.FC<{ currentSong: Song | null; currentTheme: Them
 
 const ITEMS_PER_PAGE = 50;
 
+const formatTotalTime = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h} h ${m} min`;
+  return `${m} min`;
+};
+
 function App() {
   // ─── Auth State ─────────────────────────────────
   const [authToken, setAuthToken] = useState<string | null>(() => {
@@ -457,11 +464,20 @@ function App() {
 
       return (
         <div className="space-y-8 animate-fade-in">
-          <div className="flex items-center gap-3 border-b border-zinc-200 dark:border-white/[0.08] pb-6">
-            <Search className="w-8 h-8 text-brand-light" />
-            <h2 className="text-3xl font-black tracking-tight">
-              Resultados para <span className="text-zinc-500 dark:text-zinc-400">"{searchQuery}"</span>
-            </h2>
+          <div className="flex flex-col gap-1 border-b border-zinc-200 dark:border-white/[0.08] pb-6">
+            <div className="flex items-center gap-3">
+              <Search className="w-8 h-8 text-brand-light" />
+              <h2 className="text-3xl font-black tracking-tight">
+                Resultados para <span className="text-zinc-500 dark:text-zinc-400">"{searchQuery}"</span>
+              </h2>
+            </div>
+            {filteredSongs.length > 0 && (
+              <div className="flex items-center gap-2 mt-2 text-sm text-zinc-500 font-medium ml-11">
+                <span>{filteredSongs.length} músicas</span>
+                <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                <span>{formatTotalTime(filteredSongs.reduce((acc, s) => acc + s.duration, 0))}</span>
+              </div>
+            )}
           </div>
 
           {filteredSongs.length === 0 && filteredPlaylists.length === 0 ? (
@@ -557,7 +573,14 @@ function App() {
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-black">Minha Biblioteca</h2>
+              <div>
+                <h2 className="text-3xl font-black">Minha Biblioteca</h2>
+                <div className="flex items-center gap-2 mt-2 text-sm text-zinc-500 font-medium">
+                  <span>{songs.length} músicas</span>
+                  <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                  <span>{formatTotalTime(songs.reduce((acc, s) => acc + s.duration, 0))}</span>
+                </div>
+              </div>
               <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">
                 <button onClick={() => setViewMode(p => ({ ...p, library: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
                 <button onClick={() => setViewMode(p => ({ ...p, library: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'list' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
@@ -582,10 +605,17 @@ function App() {
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="flex items-center justify-between">
-              <h2 className="text-3xl font-black flex items-center gap-3">
-                <Heart className="w-8 h-8 text-brand fill-brand" />
-                Suas Favoritas
-              </h2>
+              <div>
+                <h2 className="text-3xl font-black flex items-center gap-3">
+                  <Heart className="w-8 h-8 text-brand fill-brand" />
+                  Suas Favoritas
+                </h2>
+                <div className="flex items-center gap-2 mt-2 text-sm text-zinc-500 font-medium pl-11">
+                  <span>{favoriteSongs.length} músicas</span>
+                  <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                  <span>{formatTotalTime(favoriteSongs.reduce((acc, s) => acc + s.duration, 0))}</span>
+                </div>
+              </div>
               {favoriteSongs.length > 0 && (
                 <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">
                   <button onClick={() => setViewMode(p => ({ ...p, favorites: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.favorites === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
@@ -722,6 +752,11 @@ function App() {
                 <div className="flex flex-col">
                   <span className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500">MOOD</span>
                   <h1 className="text-4xl font-black tracking-tight">{category?.label}</h1>
+                  <div className="flex items-center gap-2 mt-2 text-sm text-zinc-500 font-medium">
+                    <span>{moodSongs.length} músicas</span>
+                    <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                    <span>{formatTotalTime(moodSongs.reduce((acc, s) => acc + s.duration, 0))}</span>
+                  </div>
                 </div>
               </div>
 

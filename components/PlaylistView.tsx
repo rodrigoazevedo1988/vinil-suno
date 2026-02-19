@@ -46,9 +46,11 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
 
   const totalDuration = playlistSongs.reduce((acc, song) => acc + song.duration, 0);
 
-  const formatTotalTime = (sec: number) => {
-    const min = Math.floor(sec / 60);
-    return `${min} min`;
+  const formatTotalTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h} h ${m} min`;
+    return `${m} min`;
   };
 
   const handleShufflePlay = () => {
