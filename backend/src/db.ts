@@ -59,6 +59,8 @@ export async function initDatabase(): Promise<void> {
         name VARCHAR(255) NOT NULL,
         description TEXT DEFAULT '',
         cover_url TEXT DEFAULT '',
+        owner_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL,
+        is_public BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
@@ -69,6 +71,25 @@ export async function initDatabase(): Promise<void> {
         position INT DEFAULT 0,
         PRIMARY KEY (playlist_id, song_id)
       );
+
+      -- Per-user favorites table (privacy: each user has their own favorites)
+      CREATE TABLE IF NOT EXISTS user_favorites (
+        user_id VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE,
+        song_id VARCHAR(36) REFERENCES songs(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (user_id, song_id)
+      );
+    `);
+
+    // Migration: add columns if they don't exist yet (safe to run multiple times)
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE playlists ADD COLUMN IF NOT EXISTS owner_id VARCHAR(36) REFERENCES users(id) ON DELETE SET NULL;
+        ALTER TABLE playlists ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+        ALTER TABLE songs ADD COLUMN IF NOT EXISTS genre VARCHAR(100) DEFAULT '';
+        ALTER TABLE songs ADD COLUMN IF NOT EXISTS lyrics TEXT DEFAULT '';
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
     `);
     console.log('✅ Tabelas do banco inicializadas');
   } catch (err) {

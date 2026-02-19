@@ -5,7 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 const router = Router();
 
 // Helper: Convert DB row to frontend-compatible Song object
-function rowToSong(row: any) {
+// Now accepts an optional userId to determine per-user favorite status
+function rowToSong(row: any, userFavoriteIds?: Set<string>) {
     return {
         id: row.id,
         title: row.title,
@@ -14,7 +15,8 @@ function rowToSong(row: any) {
         coverUrl: row.cover_url || '',
         audioUrl: row.audio_url || '',
         duration: row.duration || 0,
-        isFavorite: row.is_favorite || false,
+        // Per-user favorites: check if this song is in the user's favorites
+        isFavorite: userFavoriteIds ? userFavoriteIds.has(row.id) : false,
         dateAdded: row.date_added ? new Date(row.date_added).toISOString().split('T')[0] : '',
         genre: row.genre || '',
         lyrics: row.lyrics || '',
@@ -26,13 +28,32 @@ function rowToSong(row: any) {
     };
 }
 
-// GET /api/songs — Listar todas as músicas
-router.get('/', async (_req: Request, res: Response) => {
+// Helper: Get user's favorite song IDs
+async function getUserFavoriteIds(userId?: string): Promise<Set<string>> {
+    if (!userId) return new Set();
     try {
+        const result = await pool.query(
+            'SELECT song_id FROM user_favorites WHERE user_id = $1',
+            [userId]
+        );
+        return new Set(result.rows.map((r: any) => r.song_id));
+    } catch {
+        // Table might not exist yet, return empty
+        return new Set();
+    }
+}
+
+// GET /api/songs — Listar todas as músicas
+// Query param: ?userId=xxx to get per-user favorites
+router.get('/', async (req: Request, res: Response) => {
+    try {
+        const userId = req.query.userId as string;
+        const userFavIds = await getUserFavoriteIds(userId);
+
         const result = await pool.query(
             'SELECT * FROM songs ORDER BY created_at DESC'
         );
-        const songs = result.rows.map(rowToSong);
+        const songs = result.rows.map((row: any) => rowToSong(row, userFavIds));
         res.json(songs);
     } catch (err) {
         console.error('Erro ao buscar músicas:', err);
@@ -43,12 +64,15 @@ router.get('/', async (_req: Request, res: Response) => {
 // GET /api/songs/:id — Buscar música por ID
 router.get('/:id', async (req: Request, res: Response) => {
     try {
+        const userId = req.query.userId as string;
+        const userFavIds = await getUserFavoriteIds(userId);
+
         const result = await pool.query('SELECT * FROM songs WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) {
             res.status(404).json({ error: 'Música não encontrada' });
             return;
         }
-        res.json(rowToSong(result.rows[0]));
+        res.json(rowToSong(result.rows[0], userFavIds));
     } catch (err) {
         console.error('Erro ao buscar música:', err);
         res.status(500).json({ error: 'Erro interno do servidor' });
@@ -67,7 +91,7 @@ router.post('/', async (req: Request, res: Response) => {
             [
                 id, title, artist, album || '',
                 coverUrl || '', audioUrl || '',
-                duration || 0, isFavorite || false,
+                duration || 0, false, // is_favorite on song table is now legacy, always false
                 dateAdded || new Date().toISOString().split('T')[0],
                 mood?.energy || 0.5, mood?.valence || 0.5, mood?.tempo || 120,
                 genre || '', lyrics || ''
@@ -85,7 +109,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/songs/:id — Atualizar música
 router.put('/:id', async (req: Request, res: Response) => {
     try {
-        const { title, artist, album, coverUrl, audioUrl, duration, isFavorite, mood, genre, lyrics } = req.body;
+        const { title, artist, album, coverUrl, audioUrl, duration, mood, genre, lyrics } = req.body;
 
         const result = await pool.query(
             `UPDATE songs SET
@@ -95,18 +119,17 @@ router.put('/:id', async (req: Request, res: Response) => {
         cover_url = COALESCE($5, cover_url),
         audio_url = COALESCE($6, audio_url),
         duration = COALESCE($7, duration),
-        is_favorite = COALESCE($8, is_favorite),
-        mood_energy = COALESCE($9, mood_energy),
-        mood_valence = COALESCE($10, mood_valence),
-        mood_tempo = COALESCE($11, mood_tempo),
-        genre = COALESCE($12, genre),
-        lyrics = COALESCE($13, lyrics),
+        mood_energy = COALESCE($8, mood_energy),
+        mood_valence = COALESCE($9, mood_valence),
+        mood_tempo = COALESCE($10, mood_tempo),
+        genre = COALESCE($11, genre),
+        lyrics = COALESCE($12, lyrics),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *`,
             [
                 req.params.id, title, artist, album,
-                coverUrl, audioUrl, duration, isFavorite,
+                coverUrl, audioUrl, duration,
                 mood?.energy, mood?.valence, mood?.tempo,
                 genre, lyrics
             ]
@@ -124,21 +147,42 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 });
 
-// PATCH /api/songs/:id/favorite — Toggle favorito
+// PATCH /api/songs/:id/favorite — Toggle favorito POR USUÁRIO
+// Body: { userId: string }
 router.patch('/:id/favorite', async (req: Request, res: Response) => {
     try {
-        const result = await pool.query(
-            `UPDATE songs SET is_favorite = NOT is_favorite, updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-            [req.params.id]
-        );
+        const songId = req.params.id;
+        const userId = req.body.userId;
 
-        if (result.rows.length === 0) {
-            res.status(404).json({ error: 'Música não encontrada' });
+        if (!userId) {
+            res.status(400).json({ error: 'userId é obrigatório para favoritar' });
             return;
         }
 
-        res.json(rowToSong(result.rows[0]));
+        // Check if already favorited
+        const existing = await pool.query(
+            'SELECT 1 FROM user_favorites WHERE user_id = $1 AND song_id = $2',
+            [userId, songId]
+        );
+
+        let isFavorite: boolean;
+        if (existing.rows.length > 0) {
+            // Remove favorite
+            await pool.query(
+                'DELETE FROM user_favorites WHERE user_id = $1 AND song_id = $2',
+                [userId, songId]
+            );
+            isFavorite = false;
+        } else {
+            // Add favorite
+            await pool.query(
+                'INSERT INTO user_favorites (user_id, song_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                [userId, songId]
+            );
+            isFavorite = true;
+        }
+
+        res.json({ songId, userId, isFavorite });
     } catch (err) {
         console.error('Erro ao favoritar música:', err);
         res.status(500).json({ error: 'Erro interno do servidor' });

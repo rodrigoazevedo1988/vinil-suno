@@ -54,10 +54,10 @@
       /* Scrollbar */
       ::-webkit-scrollbar { width: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(123, 30, 58, 0.2); border-radius: 10px; }
+      ::-webkit-scrollbar-thumb { background: rgba(123, 30, 58, 0.25); border-radius: 10px; }
       .dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); }
 
-      /* Glass Styles - Dark (Default) */
+      /* ─── Glass Styles — Dark (Default) ─── */
       .glass-sidebar {
         background: rgba(10, 10, 10, 0.8);
         backdrop-filter: blur(20px);
@@ -77,24 +77,38 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
       }
 
-      /* Glass Styles - Light Mode Overrides */
+      /* ─── Glass Styles — Light Mode ─── */
       .light .glass-sidebar {
-        background: rgba(255, 255, 255, 0.7);
-        border-right: 1px solid rgba(0, 0, 0, 0.05);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04);
       }
       .light .glass-player {
-        background: rgba(255, 255, 255, 0.8);
-        border-top: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.05);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(24px);
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+        box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.06);
       }
       .light .glass-card {
-        background: rgba(0, 0, 0, 0.02);
-        border: 1px solid rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+      }
+      .light .glass-card:hover {
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        border-color: rgba(0, 0, 0, 0.1);
       }
       .light .glass-input {
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(0, 0, 0, 0.1);
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(0, 0, 0, 0.12);
         color: #1e293b;
+        box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
+      }
+      .light .glass-input:focus {
+        border-color: rgb(var(--brand-primary-rgb));
+        box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
       }
 
       input[type=range] { -webkit-appearance: none; background: transparent; }
@@ -103,8 +117,18 @@
         background: white; cursor: pointer; border: 2px solid rgb(var(--brand-primary-rgb));
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       }
+      .light input[type=range]::-webkit-slider-thumb {
+        background: rgb(var(--brand-primary-rgb));
+        border-color: rgb(var(--brand-primary-rgb));
+        box-shadow: 0 2px 6px rgba(var(--brand-primary-rgb), 0.3);
+      }
       
       .active-press:active { transform: scale(0.96); }
+
+      /* ─── Light Mode Overrides for Player ─── */
+      .light .player-text-primary { color: #1e293b; }
+      .light .player-text-secondary { color: #64748b; }
+      .light .player-text-muted { color: #94a3b8; }
     </style>
   <script type="importmap">
 {

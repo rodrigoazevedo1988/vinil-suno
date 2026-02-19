@@ -1,0 +1,365 @@
+/* ═══════════════════════════════════════════════════════════
+   VINIL SUNO — Expanded Player Visualizer Effects
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Sound Wave Rings (around cover art) ────────────────── */
+.sound-wave-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(158, 42, 77, 0.4);
+  pointer-events: none;
+  animation: soundWaveExpand 2.5s ease-out infinite;
+}
+
+.sound-wave-ring:nth-child(1) { animation-delay: 0s; }
+.sound-wave-ring:nth-child(2) { animation-delay: 0.6s; }
+.sound-wave-ring:nth-child(3) { animation-delay: 1.2s; }
+.sound-wave-ring:nth-child(4) { animation-delay: 1.8s; }
+
+@keyframes soundWaveExpand {
+  0% {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    opacity: 0.6;
+    border-color: rgba(158, 42, 77, 0.5);
+  }
+  100% {
+    width: 180%;
+    height: 180%;
+    top: -40%;
+    left: -40%;
+    opacity: 0;
+    border-color: rgba(158, 42, 77, 0);
+  }
+}
+
+/* Paused state: freeze waves */
+.sound-wave-paused .sound-wave-ring {
+  animation-play-state: paused;
+  opacity: 0.1;
+}
+
+/* ── Equalizer Bars Container ───────────────────────────── */
+.equalizer-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 100%;
+  width: 100%;
+  padding: 0 8px;
+}
+
+.equalizer-bar {
+  width: 4px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(
+    to top,
+    rgba(158, 42, 77, 0.6),
+    rgba(200, 60, 100, 0.9),
+    rgba(255, 120, 160, 1)
+  );
+  animation: equalizerBounce var(--eq-speed, 0.8s) ease-in-out infinite alternate;
+  transform-origin: bottom;
+  box-shadow: 0 0 8px rgba(158, 42, 77, 0.3);
+}
+
+/* 32 individual bar delays for organic movement */
+.equalizer-bar:nth-child(1)  { --eq-speed: 0.45s; --eq-height: 40%; animation-delay: 0.00s; }
+.equalizer-bar:nth-child(2)  { --eq-speed: 0.55s; --eq-height: 65%; animation-delay: 0.05s; }
+.equalizer-bar:nth-child(3)  { --eq-speed: 0.40s; --eq-height: 80%; animation-delay: 0.10s; }
+.equalizer-bar:nth-child(4)  { --eq-speed: 0.60s; --eq-height: 55%; animation-delay: 0.03s; }
+.equalizer-bar:nth-child(5)  { --eq-speed: 0.50s; --eq-height: 90%; animation-delay: 0.15s; }
+.equalizer-bar:nth-child(6)  { --eq-speed: 0.42s; --eq-height: 70%; animation-delay: 0.08s; }
+.equalizer-bar:nth-child(7)  { --eq-speed: 0.58s; --eq-height: 45%; animation-delay: 0.12s; }
+.equalizer-bar:nth-child(8)  { --eq-speed: 0.48s; --eq-height: 85%; animation-delay: 0.02s; }
+.equalizer-bar:nth-child(9)  { --eq-speed: 0.52s; --eq-height: 60%; animation-delay: 0.18s; }
+.equalizer-bar:nth-child(10) { --eq-speed: 0.44s; --eq-height: 95%; animation-delay: 0.06s; }
+.equalizer-bar:nth-child(11) { --eq-speed: 0.56s; --eq-height: 50%; animation-delay: 0.14s; }
+.equalizer-bar:nth-child(12) { --eq-speed: 0.46s; --eq-height: 75%; animation-delay: 0.09s; }
+.equalizer-bar:nth-child(13) { --eq-speed: 0.54s; --eq-height: 88%; animation-delay: 0.01s; }
+.equalizer-bar:nth-child(14) { --eq-speed: 0.41s; --eq-height: 42%; animation-delay: 0.17s; }
+.equalizer-bar:nth-child(15) { --eq-speed: 0.62s; --eq-height: 72%; animation-delay: 0.04s; }
+.equalizer-bar:nth-child(16) { --eq-speed: 0.43s; --eq-height: 98%; animation-delay: 0.11s; }
+.equalizer-bar:nth-child(17) { --eq-speed: 0.57s; --eq-height: 58%; animation-delay: 0.07s; }
+.equalizer-bar:nth-child(18) { --eq-speed: 0.49s; --eq-height: 82%; animation-delay: 0.16s; }
+.equalizer-bar:nth-child(19) { --eq-speed: 0.53s; --eq-height: 47%; animation-delay: 0.13s; }
+.equalizer-bar:nth-child(20) { --eq-speed: 0.47s; --eq-height: 92%; animation-delay: 0.00s; }
+.equalizer-bar:nth-child(21) { --eq-speed: 0.51s; --eq-height: 63%; animation-delay: 0.19s; }
+.equalizer-bar:nth-child(22) { --eq-speed: 0.59s; --eq-height: 78%; animation-delay: 0.02s; }
+.equalizer-bar:nth-child(23) { --eq-speed: 0.44s; --eq-height: 53%; animation-delay: 0.10s; }
+.equalizer-bar:nth-child(24) { --eq-speed: 0.55s; --eq-height: 86%; animation-delay: 0.06s; }
+.equalizer-bar:nth-child(25) { --eq-speed: 0.48s; --eq-height: 68%; animation-delay: 0.15s; }
+.equalizer-bar:nth-child(26) { --eq-speed: 0.42s; --eq-height: 43%; animation-delay: 0.08s; }
+.equalizer-bar:nth-child(27) { --eq-speed: 0.60s; --eq-height: 76%; animation-delay: 0.03s; }
+.equalizer-bar:nth-child(28) { --eq-speed: 0.50s; --eq-height: 91%; animation-delay: 0.12s; }
+.equalizer-bar:nth-child(29) { --eq-speed: 0.46s; --eq-height: 57%; animation-delay: 0.07s; }
+.equalizer-bar:nth-child(30) { --eq-speed: 0.52s; --eq-height: 84%; animation-delay: 0.14s; }
+.equalizer-bar:nth-child(31) { --eq-speed: 0.58s; --eq-height: 48%; animation-delay: 0.01s; }
+.equalizer-bar:nth-child(32) { --eq-speed: 0.44s; --eq-height: 73%; animation-delay: 0.09s; }
+
+@keyframes equalizerBounce {
+  0%   { height: 8%; opacity: 0.5; }
+  100% { height: var(--eq-height, 70%); opacity: 1; }
+}
+
+/* Paused equalizer */
+.equalizer-paused .equalizer-bar {
+  animation-play-state: paused;
+  opacity: 0.25;
+  height: 8% !important;
+  transition: all 0.6s ease;
+}
+
+/* ── Floating Particles ─────────────────────────────────── */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particleFloat var(--p-duration, 6s) ease-in-out infinite;
+  opacity: 0;
+}
+
+@keyframes particleFloat {
+  0% {
+    transform: translateY(0) translateX(0) scale(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: var(--p-opacity, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    transform: translateY(var(--p-travel-y, -80px)) translateX(var(--p-travel-x, 20px)) scale(1.2);
+    opacity: var(--p-opacity, 0.6);
+  }
+  100% {
+    transform: translateY(var(--p-end-y, -160px)) translateX(var(--p-end-x, -10px)) scale(0);
+    opacity: 0;
+  }
+}
+
+.particle-paused .particle {
+  animation-play-state: paused;
+  opacity: 0 !important;
+}
+
+/* ── Waveform Line (horizontal) ─────────────────────────── */
+.waveform-line {
+  position: relative;
+  width: 100%;
+  height: 60px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.waveform-svg {
+  width: 200%;
+  height: 100%;
+  animation: waveformScroll 3s linear infinite;
+}
+
+.waveform-svg.paused {
+  animation-play-state: paused;
+}
+
+@keyframes waveformScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Vinyl Spin (cover art) ─────────────────────────────── */
+.vinyl-spin {
+  animation: vinylRotate 20s linear infinite;
+}
+
+.vinyl-spin.paused {
+  animation-play-state: paused;
+}
+
+@keyframes vinylRotate {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Glow Pulse (behind cover art) ──────────────────────── */
+.glow-pulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+.glow-pulse.paused {
+  animation-play-state: paused;
+  opacity: 0.1 !important;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 40px rgba(158, 42, 77, 0.3), 0 0 80px rgba(158, 42, 77, 0.15);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 70px rgba(158, 42, 77, 0.5), 0 0 120px rgba(158, 42, 77, 0.25);
+    transform: scale(1.02);
+  }
+}
+
+/* ── Mini Equalizer (for bottom bar) ────────────────────── */
+.mini-equalizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+
+.mini-eq-bar {
+  width: 3px;
+  border-radius: 1px;
+  background: rgb(var(--brand-light-rgb));
+  animation: miniEqBounce var(--meq-speed, 0.5s) ease-in-out infinite alternate;
+}
+
+.mini-eq-bar:nth-child(1) { --meq-speed: 0.4s; animation-delay: 0s; }
+.mini-eq-bar:nth-child(2) { --meq-speed: 0.55s; animation-delay: 0.1s; }
+.mini-eq-bar:nth-child(3) { --meq-speed: 0.35s; animation-delay: 0.2s; }
+.mini-eq-bar:nth-child(4) { --meq-speed: 0.5s; animation-delay: 0.05s; }
+.mini-eq-bar:nth-child(5) { --meq-speed: 0.45s; animation-delay: 0.15s; }
+
+.mini-equalizer.paused .mini-eq-bar {
+  animation-play-state: paused;
+  height: 3px !important;
+  transition: height 0.4s ease;
+}
+
+@keyframes miniEqBounce {
+  0%   { height: 3px; }
+  100% { height: 16px; }
+}
+
+/* ── Ambient Gradient Orbs ──────────────────────────────── */
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: orbFloat 8s ease-in-out infinite;
+}
+
+.ambient-orb:nth-child(1) {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(158, 42, 77, 0.25), transparent 70%);
+  top: -10%;
+  right: -5%;
+  animation-delay: 0s;
+  animation-duration: 10s;
+}
+
+.ambient-orb:nth-child(2) {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(100, 20, 60, 0.2), transparent 70%);
+  bottom: 10%;
+  left: -8%;
+  animation-delay: -3s;
+  animation-duration: 12s;
+}
+
+.ambient-orb:nth-child(3) {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(180, 50, 90, 0.15), transparent 70%);
+  top: 40%;
+  right: 20%;
+  animation-delay: -6s;
+  animation-duration: 14s;
+}
+
+.ambient-orb.paused {
+  opacity: 0.3;
+  animation-play-state: paused;
+}
+
+@keyframes orbFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(30px, -20px) scale(1.1);
+  }
+  50% {
+    transform: translate(-20px, 30px) scale(0.9);
+  }
+  75% {
+    transform: translate(15px, 15px) scale(1.05);
+  }
+}
+
+/* ── Spectrum Reflection (under cover art) ──────────────── */
+.spectrum-reflection {
+  position: absolute;
+  bottom: -40px;
+  left: 50%;
+  transform: translateX(-50%) scaleY(-1);
+  opacity: 0.15;
+  filter: blur(4px);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+  pointer-events: none;
+}
+
+/* ── Progress Glow ──────────────────────────────────────── */
+.progress-glow {
+  position: relative;
+}
+
+.progress-glow::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--brand-light-rgb));
+  box-shadow: 0 0 12px rgba(158, 42, 77, 0.8), 0 0 24px rgba(158, 42, 77, 0.4);
+  animation: progressGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes progressGlow {
+  0%, 100% { box-shadow: 0 0 12px rgba(158, 42, 77, 0.8), 0 0 24px rgba(158, 42, 77, 0.4); }
+  50% { box-shadow: 0 0 20px rgba(158, 42, 77, 1), 0 0 40px rgba(158, 42, 77, 0.6); }
+}
+
+/* ── Smooth Height Transitions for Expanded ─────────────── */
+.expanded-player-enter {
+  animation: expandedEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes expandedEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Cover Art Breathe ──────────────────────────────────── */
+.cover-breathe {
+  animation: coverBreathe 4s ease-in-out infinite;
+}
+
+.cover-breathe.paused {
+  animation-play-state: paused;
+  transform: scale(1);
+}
+
+@keyframes coverBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}

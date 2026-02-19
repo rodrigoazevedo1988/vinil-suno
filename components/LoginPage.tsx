@@ -3,9 +3,10 @@ import { Loader2, Music, AlertCircle, Eye, EyeOff, UserPlus, LogIn } from 'lucid
 
 interface LoginPageProps {
     onLogin: (token: string, user: any) => void;
+    onTerms?: () => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onTerms }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -145,10 +146,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                     </button>
                 </form>
 
-                <div className="mt-8 text-center">
-                    <p className="text-zinc-500 text-xs">
-                        Ao {isLogin ? 'entrar' : 'se cadastrar'}, você concorda com nossos <a href="#" className="text-zinc-400 hover:text-white underline decoration-zinc-700">Termos de Uso</a> e <a href="#" className="text-zinc-400 hover:text-white underline decoration-zinc-700">Privacidade</a>.
-                    </p>
+                <div className="mt-8 text-center" style={{ fontSize: '0.75rem', lineHeight: '1rem', color: 'rgb(113 113 122)' }}>
+                    Ao {isLogin ? 'entrar' : 'se cadastrar'}, você concorda com nossos{' '}
+                    <button
+                        onClick={onTerms}
+                        className="text-zinc-400 hover:text-white underline decoration-zinc-700 font-medium cursor-pointer bg-transparent border-0 p-0 inline"
+                        type="button"
+                    >
+                        Termos de Uso
+                    </button>
+                    {' '}e{' '}
+                    <a href="#" className="text-zinc-400 hover:text-white underline decoration-zinc-700">Privacidade</a>.
                 </div>
             </div>
         </div>

@@ -38,6 +38,9 @@ COPY --from=builder /app/dist ./dist
 # Create uploads directory
 RUN mkdir -p /app/uploads/audio /app/uploads/images
 
+# Install ffmpeg for radio streaming
+RUN apk add --no-cache ffmpeg
+
 EXPOSE 5043
 
 ENV NODE_ENV=production

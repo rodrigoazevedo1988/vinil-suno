@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus, Trash2, Edit2, Save, X, Music, Image as ImageIcon,
   Activity, Download, Upload, Search, CheckCircle, AlertCircle,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Song, Playlist } from '../types';
 import { GoogleGenAI, Type } from "@google/genai";
+import * as mm from 'music-metadata-browser';
 
 interface CMSViewProps {
   songs: Song[];
@@ -43,8 +44,39 @@ const CMSView: React.FC<CMSViewProps> = ({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
   const [audioInputMode, setAudioInputMode] = useState<'upload' | 'url'>('upload');
   const [coverInputMode, setCoverInputMode] = useState<'upload' | 'url'>('upload');
+
+  // Stats State
+  const [serverStats, setServerStats] = useState<any>(null);
+
+  useEffect(() => {
+    if (apiAvailable) {
+      fetch('/api/stats')
+        .then(r => r.json())
+        .then(setServerStats)
+        .catch(console.error);
+    }
+  }, [apiAvailable, songs, playlists]);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDurationStart = (sec: number) => {
+    const hrs = Math.floor(sec / 3600);
+    const min = Math.floor((sec % 3600) / 60);
+    return hrs > 0 ? `${hrs}h ${min}m` : `${min}m`;
+  };
+
+  // Bulk Upload State
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; filename: string } | null>(null);
 
   // --- Form States ---
   // --- Form States ---
@@ -249,6 +281,82 @@ const CMSView: React.FC<CMSViewProps> = ({
     if (file) handleFileUpload(file, type);
   };
 
+  const handleBulkSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsBulkUploading(true);
+    let successCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setBulkProgress({ current: i + 1, total: files.length, filename: file.name });
+
+      try {
+        // 0. Extract Metadata (music-metadata-browser)
+        let metadata = { common: { title: '', artist: '', album: '', genre: [''], picture: [] as any[] }, format: { duration: 0 } };
+
+        try {
+          // @ts-ignore
+          metadata = await mm.parseBlob(file);
+        } catch (e) {
+          console.warn('Metadata extraction failed', e);
+        }
+
+        const { common, format } = metadata;
+
+        // 1. Upload Audio
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadRes = await fetch('/api/upload/audio', { method: 'POST', body: formData });
+        if (!uploadRes.ok) throw new Error('Falha no upload do áudio');
+        const uploadData = await uploadRes.json();
+
+        // 2. Create Song with defaults
+        const filenameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+        // Clean up common trash in filenames if needed
+        const title = filenameWithoutExt.replace(/_/g, ' ').replace(/-/g, ' ');
+
+        // Try to get duration
+        let duration = 180; // Default 3min
+        try {
+          const audio = new Audio(uploadData.url);
+          await new Promise(r => { audio.addEventListener('loadedmetadata', r); audio.load(); });
+          if (audio.duration && isFinite(audio.duration)) duration = Math.round(audio.duration);
+        } catch (e) { console.warn('Could not detect duration', e); }
+
+        const newSong: Song = {
+          id: Math.random().toString(36).substr(2, 9), // Temp ID, backend generates real one usually
+          title: title,
+          artist: 'Suno AI V5',
+          album: 'Suno Uploads',
+          coverUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400', // Default placeholder
+          audioUrl: uploadData.url,
+          duration: duration,
+          isFavorite: false,
+          dateAdded: new Date().toISOString().split('T')[0],
+          mood: { energy: 0.5, valence: 0.5, tempo: 120 },
+          genre: '', lyrics: ''
+        };
+
+        onAddSong(newSong);
+        successCount++;
+
+      } catch (err) {
+        console.error(`Erro ao enviar ${file.name}:`, err);
+        showToast(`Erro em ${file.name}`, 'error');
+      }
+    }
+
+    setIsBulkUploading(false);
+    setBulkProgress(null);
+    showToast(`${successCount} músicas enviadas com sucesso!`);
+
+    // Clear input
+    e.target.value = '';
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -368,18 +476,35 @@ const CMSView: React.FC<CMSViewProps> = ({
                   {apiAvailable ? 'Conectado à API' : 'Modo Offline'}
                 </span>
               )}
-              <div className="flex items-center gap-6 mt-4">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Music className="w-4 h-4 text-brand-light" />
-                  <span className="text-sm font-bold"><span className="text-white">{stats.totalSongs}</span> faixas</span>
+
+
+              {/* Detailed Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 mt-6 bg-white/5 p-4 rounded-xl border border-white/5 backdrop-blur-sm">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Músicas</span>
+                  <span className="text-xl font-black text-white">{serverStats?.songs || stats.totalSongs}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">{serverStats ? formatBytes(serverStats.storage.audio) : '-'}</span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Disc className="w-4 h-4 text-brand-light" />
-                  <span className="text-sm font-bold"><span className="text-white">{stats.totalPlaylists}</span> playlists</span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Playlists</span>
+                  <span className="text-xl font-black text-white">{serverStats?.playlists || stats.totalPlaylists}</span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Users className="w-4 h-4 text-brand-light" />
-                  <span className="text-sm font-bold"><span className="text-white">{stats.uniqueArtists}</span> artistas</span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Artistas</span>
+                  <span className="text-xl font-black text-white">{serverStats?.artists || stats.uniqueArtists}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Imagens</span>
+                  <span className="text-xl font-black text-white">{serverStats?.files?.images || 0}</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">{serverStats ? formatBytes(serverStats.storage.images) : '-'}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Duração Total</span>
+                  <span className="text-xl font-black text-white">{serverStats ? formatDurationStart(serverStats.totalDuration) : `${stats.totalTime}m`}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Espaço Total</span>
+                  <span className="text-xl font-black text-white">{serverStats ? formatBytes(serverStats.storage.total) : '-'}</span>
                 </div>
               </div>
             </>
@@ -399,409 +524,436 @@ const CMSView: React.FC<CMSViewProps> = ({
             <Plus className="w-5 h-5" />
             Novo Item
           </button>
+
+          {/* Bulk Upload Button */}
+          {isAdmin && (
+            <>
+              <input
+                type="file"
+                id="bulk-upload-input"
+                multiple
+                accept="audio/*"
+                className="hidden"
+                onChange={handleBulkSelect}
+                disabled={isBulkUploading}
+              />
+              <button
+                onClick={() => document.getElementById('bulk-upload-input')?.click()}
+                disabled={isBulkUploading}
+                className="flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full font-bold transition-all duration-base active-press shadow-lg border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+                {isBulkUploading ? `Enviando ${bulkProgress?.current}/${bulkProgress?.total}` : 'Upload em Massa'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Tabs */}
-      {isAdmin && (
-        <div className="flex items-center gap-2 p-1 bg-white/[0.03] rounded-xl w-fit border border-white/5">
-          <button
-            onClick={() => { setActiveTab('songs'); resetForms(); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'songs' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <List className="w-4 h-4" /> Gestão de Músicas
-          </button>
-          <button
-            onClick={() => { setActiveTab('playlists'); resetForms(); }}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'playlists' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <LayoutGrid className="w-4 h-4" /> Gestão de Playlists
-          </button>
-        </div>
-      )}
-
-      {isAdding && (
-        <div className="glass-card rounded-2xl p-8 border border-white/10 animate-scale-in relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-1 h-full bg-brand" />
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-              <div className="p-2 bg-brand/20 rounded-lg">
-                {activeTab === 'songs' ? <Music className="text-brand-light w-5 h-5" /> : <Disc className="text-brand-light w-5 h-5" />}
-              </div>
-              {activeTab === 'songs' ? (editingSongId ? 'Editar Música' : 'Nova Música') : 'Gerenciar Playlist'}
-            </h3>
-            <button onClick={resetForms} className="p-2 text-zinc-500 hover:text-white transition-colors bg-white/5 rounded-full">
-              <X className="w-5 h-5" />
+      {
+        isAdmin && (
+          <div className="flex items-center gap-2 p-1 bg-white/[0.03] rounded-xl w-fit border border-white/5">
+            <button
+              onClick={() => { setActiveTab('songs'); resetForms(); }}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'songs' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <List className="w-4 h-4" /> Gestão de Músicas
+            </button>
+            <button
+              onClick={() => { setActiveTab('playlists'); resetForms(); }}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'playlists' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <LayoutGrid className="w-4 h-4" /> Gestão de Playlists
             </button>
           </div>
+        )
+      }
 
-          {activeTab === 'songs' ? (
-            <form onSubmit={handleSongSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-7 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Título</label>
-                    <input required value={songFormData.title} onChange={e => setSongFormData({ ...songFormData, title: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50" placeholder="Neon Dreams" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Artista</label>
-                    <input required value={songFormData.artist} onChange={e => setSongFormData({ ...songFormData, artist: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50" placeholder="Suno AI V5" />
-                  </div>
+      {
+        isAdding && (
+          <div className="glass-card rounded-2xl p-8 border border-white/10 animate-scale-in relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-brand" />
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                <div className="p-2 bg-brand/20 rounded-lg">
+                  {activeTab === 'songs' ? <Music className="text-brand-light w-5 h-5" /> : <Disc className="text-brand-light w-5 h-5" />}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Álbum</label>
-                    <input value={songFormData.album} onChange={e => setSongFormData({ ...songFormData, album: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Nome do Álbum" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Gênero</label>
-                    <input value={songFormData.genre} onChange={e => setSongFormData({ ...songFormData, genre: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Ex: Sertanejo" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Duração (MM:SS)</label>
-                  <input type="text" value={durationStr} onChange={handleDurationChange} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="03:00" />
-                </div>
+                {activeTab === 'songs' ? (editingSongId ? 'Editar Música' : 'Nova Música') : 'Gerenciar Playlist'}
+              </h3>
+              <button onClick={resetForms} className="p-2 text-zinc-500 hover:text-white transition-colors bg-white/5 rounded-full">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-                {/* ── Upload de Áudio ── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Arquivo de Áudio</label>
-                    <button
-                      type="button"
-                      onClick={() => setAudioInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
-                      className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
-                    >
-                      {audioInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
-                    </button>
-                  </div>
-                  {audioInputMode === 'url' ? (
-                    <input value={songFormData.audioUrl} onChange={e => setSongFormData({ ...songFormData, audioUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/audio.mp3" />
-                  ) : (
-                    <div
-                      onDrop={e => handleDrop(e, 'audio')}
-                      onDragOver={handleDragOver}
-                      className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${songFormData.audioUrl && !songFormData.audioUrl.startsWith('http') ? 'border-emerald-500/30 bg-emerald-500/5' :
-                        songFormData.audioUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
-                        }`}
-                      onClick={() => document.getElementById('audio-upload-input')?.click()}
-                    >
-                      <input
-                        id="audio-upload-input"
-                        type="file"
-                        accept="audio/*"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload(file, 'audio');
-                        }}
-                      />
-                      {isUploadingAudio ? (
-                        <div className="flex flex-col items-center gap-2 text-brand-light">
-                          <Loader2 className="w-8 h-8 animate-spin" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Enviando áudio...</span>
-                        </div>
-                      ) : songFormData.audioUrl ? (
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="flex items-center gap-2 text-emerald-400">
-                            <CheckCircle className="w-5 h-5" />
-                            <span className="text-sm font-bold">Áudio carregado</span>
-                          </div>
-                          <audio controls src={songFormData.audioUrl} className="w-full max-w-xs h-8 opacity-70" />
-                          <span className="text-[10px] text-zinc-500 truncate max-w-full">{songFormData.audioUrl.split('/').pop()}</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-zinc-400">
-                          <Upload className="w-8 h-8" />
-                          <span className="text-sm font-bold">Arraste o MP3 aqui ou clique para selecionar</span>
-                          <span className="text-[10px] text-zinc-600">MP3, WAV, OGG, FLAC • Máx 50MB</span>
-                        </div>
-                      )}
+            {activeTab === 'songs' ? (
+              <form onSubmit={handleSongSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <div className="lg:col-span-7 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Título</label>
+                      <input required value={songFormData.title} onChange={e => setSongFormData({ ...songFormData, title: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50" placeholder="Neon Dreams" />
                     </div>
-                  )}
-                </div>
-
-                {/* ── Upload de Capa (Song) ── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Capa do Álbum</label>
-                    <button
-                      type="button"
-                      onClick={() => setCoverInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
-                      className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
-                    >
-                      {coverInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
-                    </button>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Artista</label>
+                      <input required value={songFormData.artist} onChange={e => setSongFormData({ ...songFormData, artist: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50" placeholder="Suno AI V5" />
+                    </div>
                   </div>
-                  {coverInputMode === 'url' ? (
-                    <input value={songFormData.coverUrl} onChange={e => setSongFormData({ ...songFormData, coverUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/cover.jpg" />
-                  ) : (
-                    <div
-                      onDrop={e => handleDrop(e, 'image')}
-                      onDragOver={handleDragOver}
-                      className={`relative border-2 border-dashed rounded-xl p-4 transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${songFormData.coverUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
-                        }`}
-                      onClick={() => document.getElementById('cover-upload-input')?.click()}
-                    >
-                      <input
-                        id="cover-upload-input"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload(file, 'image');
-                        }}
-                      />
-                      {isUploadingImage ? (
-                        <div className="flex flex-col items-center gap-2 text-brand-light py-4">
-                          <Loader2 className="w-8 h-8 animate-spin" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Enviando imagem...</span>
-                        </div>
-                      ) : songFormData.coverUrl ? (
-                        <div className="flex items-center gap-4">
-                          <img src={songFormData.coverUrl} alt="Preview" className="w-20 h-20 rounded-lg object-cover border border-white/10 shadow-lg" />
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2 text-emerald-400">
-                              <CheckCircle className="w-4 h-4" />
-                              <span className="text-sm font-bold">Capa carregada</span>
-                            </div>
-                            <span className="text-[10px] text-zinc-500">Clique para trocar</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-zinc-400 py-4">
-                          <ImageIcon className="w-8 h-8" />
-                          <span className="text-sm font-bold">Arraste a imagem aqui ou clique para selecionar</span>
-                          <span className="text-[10px] text-zinc-600">JPG, PNG, WebP • Máx 50MB</span>
-                        </div>
-                      )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Álbum</label>
+                      <input value={songFormData.album} onChange={e => setSongFormData({ ...songFormData, album: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Nome do Álbum" />
                     </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="lg:col-span-5 space-y-8">
-                <div className="space-y-6">
-                  {/* ... Mood Analysis fields ... */}
-                  <div className="flex items-center justify-between text-zinc-300 font-bold text-sm uppercase tracking-wider">
-                    <div className="flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-brand-light" /> Mood Analysis
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Gênero</label>
+                      <input value={songFormData.genre} onChange={e => setSongFormData({ ...songFormData, genre: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Ex: Sertanejo" />
                     </div>
-                    <button
-                      type="button"
-                      onClick={suggestMoodWithAI}
-                      disabled={isAiLoading}
-                      className="text-[10px] flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 text-brand-light rounded-full hover:bg-brand/30 transition-all border border-brand/20 disabled:opacity-50"
-                    >
-                      {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                      {isAiLoading ? 'Analisando...' : 'Sugerir com IA'}
-                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Duração (MM:SS)</label>
+                    <input type="text" value={durationStr} onChange={handleDurationChange} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="03:00" />
                   </div>
 
-                  {/* Mood Presets */}
-                  {/* Mood Presets */}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {moodPresets.map((preset: any) => (
-                      <div key={preset.label} className="group relative">
-                        <button
-                          type="button"
-                          onClick={() => setSongFormData(p => ({ ...p, mood: preset.mood }))}
-                          className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-full pl-3 pr-7 py-1.5 text-xs font-bold text-zinc-300 hover:text-white transition-all flex items-center gap-2"
-                        >
-                          <span>{preset.emoji}</span> {preset.label}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => deleteMood(preset.label, e)}
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-
-                    {isAddingMood ? (
-                      <div className="flex items-center gap-2 bg-white/5 rounded-full px-2 py-1 transition-all animate-scale-in border border-white/10">
-                        <input
-                          value={newMoodEmoji}
-                          onChange={e => setNewMoodEmoji(e.target.value)}
-                          className="w-6 bg-transparent text-center outline-none border-r border-white/10"
-                          placeholder="✨"
-                          maxLength={2}
-                        />
-                        <input
-                          value={newMoodName}
-                          onChange={e => setNewMoodName(e.target.value)}
-                          className="w-20 bg-transparent text-xs text-white outline-none px-1"
-                          placeholder="Nome..."
-                          autoFocus
-                        />
-                        <button type="button" onClick={saveNewMood} className="p-1 text-emerald-400 hover:text-emerald-300"><Check className="w-3 h-3" /></button>
-                        <button type="button" onClick={() => setIsAddingMood(false)} className="p-1 text-zinc-500 hover:text-white"><X className="w-3 h-3" /></button>
-                      </div>
-                    ) : (
+                  {/* ── Upload de Áudio ── */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Arquivo de Áudio</label>
                       <button
                         type="button"
-                        onClick={() => setIsAddingMood(true)}
-                        className="w-7 h-7 flex items-center justify-center rounded-full border border-dashed border-zinc-600 text-zinc-600 hover:text-white hover:border-white transition-all"
-                        title="Salvar mood atual como preset"
+                        onClick={() => setAudioInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
+                        className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
                       >
-                        <Plus className="w-4 h-4" />
+                        {audioInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
                       </button>
+                    </div>
+                    {audioInputMode === 'url' ? (
+                      <input value={songFormData.audioUrl} onChange={e => setSongFormData({ ...songFormData, audioUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/audio.mp3" />
+                    ) : (
+                      <div
+                        onDrop={e => handleDrop(e, 'audio')}
+                        onDragOver={handleDragOver}
+                        className={`relative border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${songFormData.audioUrl && !songFormData.audioUrl.startsWith('http') ? 'border-emerald-500/30 bg-emerald-500/5' :
+                          songFormData.audioUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
+                          }`}
+                        onClick={() => document.getElementById('audio-upload-input')?.click()}
+                      >
+                        <input
+                          id="audio-upload-input"
+                          type="file"
+                          accept="audio/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(file, 'audio');
+                          }}
+                        />
+                        {isUploadingAudio ? (
+                          <div className="flex flex-col items-center gap-2 text-brand-light">
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <span className="text-xs font-bold uppercase tracking-widest">Enviando áudio...</span>
+                          </div>
+                        ) : songFormData.audioUrl ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="flex items-center gap-2 text-emerald-400">
+                              <CheckCircle className="w-5 h-5" />
+                              <span className="text-sm font-bold">Áudio carregado</span>
+                            </div>
+                            <audio controls src={songFormData.audioUrl} className="w-full max-w-xs h-8 opacity-70" />
+                            <span className="text-[10px] text-zinc-500 truncate max-w-full">{songFormData.audioUrl.split('/').pop()}</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-zinc-400">
+                            <Upload className="w-8 h-8" />
+                            <span className="text-sm font-bold">Arraste o MP3 aqui ou clique para selecionar</span>
+                            <span className="text-[10px] text-zinc-600">MP3, WAV, OGG, FLAC • Máx 50MB</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-zinc-500">ENERGIA</span>
-                        <span className="text-brand-light">{Math.round((songFormData.mood?.energy || 0) * 100)}%</span>
-                      </div>
-                      <input type="range" min="0" max="1" step="0.1" value={songFormData.mood?.energy} onChange={e => setSongFormData({ ...songFormData, mood: { ...songFormData.mood!, energy: Number(e.target.value) } })} className="w-full accent-brand h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                  {/* ── Upload de Capa (Song) ── */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Capa do Álbum</label>
+                      <button
+                        type="button"
+                        onClick={() => setCoverInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
+                        className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
+                      >
+                        {coverInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
+                      </button>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-zinc-500">VALÊNCIA</span>
-                        <span className="text-brand-light">{Math.round((songFormData.mood?.valence || 0) * 100)}%</span>
-                      </div>
-                      <input type="range" min="0" max="1" step="0.1" value={songFormData.mood?.valence} onChange={e => setSongFormData({ ...songFormData, mood: { ...songFormData.mood!, valence: Number(e.target.value) } })} className="w-full accent-brand h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                    </div>
-                  </div>
-
-                  {/* Lyrics */}
-                  <div className="space-y-2 pt-4 border-t border-white/10">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Letra da Música</label>
-                    <textarea
-                      value={songFormData.lyrics}
-                      onChange={e => setSongFormData({ ...songFormData, lyrics: e.target.value })}
-                      className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none min-h-[150px] font-mono text-sm leading-relaxed"
-                      placeholder="Cole a letra da música aqui..."
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4">
-                  <button type="submit" className="w-full py-4 bg-white text-black rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-[1.02] transition-all active-press shadow-xl">
-                    <Save className="w-5 h-5" />
-                    {editingSongId ? 'Salvar Alterações' : 'Publicar Música'}
-                  </button>
-                </div>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handlePlaylistSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-6 space-y-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Nome da Playlist</label>
-                  <input required value={playlistFormData.name} onChange={e => setPlaylistFormData({ ...playlistFormData, name: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Descrição</label>
-                  <textarea value={playlistFormData.description} onChange={e => setPlaylistFormData({ ...playlistFormData, description: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none min-h-[100px]" />
-                </div>
-
-                <div className="flex items-center gap-3 px-1">
-                  {isAdmin && (
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <div className={`w-5 h-5 rounded border border-white/20 flex items-center justify-center transition-all ${playlistFormData.isPublic ? 'bg-brand border-brand' : 'bg-transparent'}`}>
-                        {playlistFormData.isPublic && <Check className="w-3.5 h-3.5 text-white" />}
-                      </div>
-                      <input type="checkbox" className="hidden" checked={playlistFormData.isPublic} onChange={e => setPlaylistFormData({ ...playlistFormData, isPublic: e.target.checked })} />
-                      <span className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors">Playlist Pública</span>
-                    </label>
-                  )}
-                  {!isAdmin && (
-                    <div className="flex items-center gap-2 text-zinc-500 text-xs font-medium bg-white/5 px-3 py-1.5 rounded-full border border-white/5" title="Sua playlist será privada">
-                      <Users className="w-3 h-3" />
-                      <span>Visível apenas para você</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Upload de Capa (Playlist) ── */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Capa da Playlist</label>
-                    <button
-                      type="button"
-                      onClick={() => setCoverInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
-                      className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
-                    >
-                      {coverInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
-                    </button>
-                  </div>
-                  {coverInputMode === 'url' ? (
-                    <input value={playlistFormData.coverUrl} onChange={e => setPlaylistFormData({ ...playlistFormData, coverUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/cover.jpg" />
-                  ) : (
-                    <div
-                      onDrop={e => handleDrop(e, 'image')}
-                      onDragOver={handleDragOver}
-                      className={`relative border-2 border-dashed rounded-xl p-4 transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${playlistFormData.coverUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
-                        }`}
-                      onClick={() => document.getElementById('playlist-cover-upload')?.click()}
-                    >
-                      <input
-                        id="playlist-cover-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload(file, 'image');
-                        }}
-                      />
-                      {isUploadingImage ? (
-                        <div className="flex flex-col items-center gap-2 text-brand-light py-4">
-                          <Loader2 className="w-8 h-8 animate-spin" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Enviando imagem...</span>
-                        </div>
-                      ) : playlistFormData.coverUrl ? (
-                        <div className="flex items-center gap-4">
-                          <img src={playlistFormData.coverUrl} alt="Preview" className="w-20 h-20 rounded-lg object-cover border border-white/10 shadow-lg" />
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2 text-emerald-400">
-                              <CheckCircle className="w-4 h-4" />
-                              <span className="text-sm font-bold">Capa carregada</span>
-                            </div>
-                            <span className="text-[10px] text-zinc-500">Clique para trocar</span>
+                    {coverInputMode === 'url' ? (
+                      <input value={songFormData.coverUrl} onChange={e => setSongFormData({ ...songFormData, coverUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/cover.jpg" />
+                    ) : (
+                      <div
+                        onDrop={e => handleDrop(e, 'image')}
+                        onDragOver={handleDragOver}
+                        className={`relative border-2 border-dashed rounded-xl p-4 transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${songFormData.coverUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
+                          }`}
+                        onClick={() => document.getElementById('cover-upload-input')?.click()}
+                      >
+                        <input
+                          id="cover-upload-input"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(file, 'image');
+                          }}
+                        />
+                        {isUploadingImage ? (
+                          <div className="flex flex-col items-center gap-2 text-brand-light py-4">
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <span className="text-xs font-bold uppercase tracking-widest">Enviando imagem...</span>
                           </div>
+                        ) : songFormData.coverUrl ? (
+                          <div className="flex items-center gap-4">
+                            <img src={songFormData.coverUrl} alt="Preview" className="w-20 h-20 rounded-lg object-cover border border-white/10 shadow-lg" />
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 text-emerald-400">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-sm font-bold">Capa carregada</span>
+                              </div>
+                              <span className="text-[10px] text-zinc-500">Clique para trocar</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-zinc-400 py-4">
+                            <ImageIcon className="w-8 h-8" />
+                            <span className="text-sm font-bold">Arraste a imagem aqui ou clique para selecionar</span>
+                            <span className="text-[10px] text-zinc-600">JPG, PNG, WebP • Máx 50MB</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="lg:col-span-5 space-y-8">
+                  <div className="space-y-6">
+                    {/* ... Mood Analysis fields ... */}
+                    <div className="flex items-center justify-between text-zinc-300 font-bold text-sm uppercase tracking-wider">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-brand-light" /> Mood Analysis
+                      </div>
+                      <button
+                        type="button"
+                        onClick={suggestMoodWithAI}
+                        disabled={isAiLoading}
+                        className="text-[10px] flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 text-brand-light rounded-full hover:bg-brand/30 transition-all border border-brand/20 disabled:opacity-50"
+                      >
+                        {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        {isAiLoading ? 'Analisando...' : 'Sugerir com IA'}
+                      </button>
+                    </div>
+
+                    {/* Mood Presets */}
+                    {/* Mood Presets */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {moodPresets.map((preset: any) => (
+                        <div key={preset.label} className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => setSongFormData(p => ({ ...p, mood: preset.mood }))}
+                            className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-full pl-3 pr-7 py-1.5 text-xs font-bold text-zinc-300 hover:text-white transition-all flex items-center gap-2"
+                          >
+                            <span>{preset.emoji}</span> {preset.label}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => deleteMood(preset.label, e)}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {isAddingMood ? (
+                        <div className="flex items-center gap-2 bg-white/5 rounded-full px-2 py-1 transition-all animate-scale-in border border-white/10">
+                          <input
+                            value={newMoodEmoji}
+                            onChange={e => setNewMoodEmoji(e.target.value)}
+                            className="w-6 bg-transparent text-center outline-none border-r border-white/10"
+                            placeholder="✨"
+                            maxLength={2}
+                          />
+                          <input
+                            value={newMoodName}
+                            onChange={e => setNewMoodName(e.target.value)}
+                            className="w-20 bg-transparent text-xs text-white outline-none px-1"
+                            placeholder="Nome..."
+                            autoFocus
+                          />
+                          <button type="button" onClick={saveNewMood} className="p-1 text-emerald-400 hover:text-emerald-300"><Check className="w-3 h-3" /></button>
+                          <button type="button" onClick={() => setIsAddingMood(false)} className="p-1 text-zinc-500 hover:text-white"><X className="w-3 h-3" /></button>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-zinc-400 py-4">
-                          <ImageIcon className="w-8 h-8" />
-                          <span className="text-sm font-bold">Arraste a imagem aqui ou clique para selecionar</span>
-                          <span className="text-[10px] text-zinc-600">JPG, PNG, WebP • Máx 50MB</span>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddingMood(true)}
+                          className="w-7 h-7 flex items-center justify-center rounded-full border border-dashed border-zinc-600 text-zinc-600 hover:text-white hover:border-white transition-all"
+                          title="Salvar mood atual como preset"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
-                  )}
-                </div>
 
-                <button type="submit" className="w-full py-4 bg-brand text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-[1.02] transition-all shadow-xl shadow-brand/20">
-                  <Save className="w-5 h-5" />
-                  {editingPlaylistId ? 'Atualizar Playlist' : 'Criar Playlist'}
-                </button>
-              </div>
-              <div className="lg:col-span-6 space-y-4">
-                <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Vincular Músicas ({playlistFormData.songIds?.length})</label>
-                <div className="max-h-[500px] overflow-y-auto space-y-2 scrollbar-thin pr-2 bg-white/[0.02] p-2 rounded-xl border border-white/5">
-                  {songs.map(song => (
-                    <button type="button" key={song.id} onClick={() => toggleSongInPlaylist(song.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${playlistFormData.songIds?.includes(song.id) ? 'bg-brand/10 border-brand/50 shadow-inner' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]'}`}>
-                      <img src={song.coverUrl} className="w-10 h-10 rounded-lg object-cover" alt="" />
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="truncate text-sm font-bold text-white">{song.title}</div>
-                        <div className="truncate text-xs text-zinc-500">{song.artist}</div>
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-zinc-500">ENERGIA</span>
+                          <span className="text-brand-light">{Math.round((songFormData.mood?.energy || 0) * 100)}%</span>
+                        </div>
+                        <input type="range" min="0" max="1" step="0.1" value={songFormData.mood?.energy} onChange={e => setSongFormData({ ...songFormData, mood: { ...songFormData.mood!, energy: Number(e.target.value) } })} className="w-full accent-brand h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer" />
                       </div>
-                      {playlistFormData.songIds?.includes(song.id) && <Check className="w-4 h-4 text-brand-light flex-shrink-0" />}
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-zinc-500">VALÊNCIA</span>
+                          <span className="text-brand-light">{Math.round((songFormData.mood?.valence || 0) * 100)}%</span>
+                        </div>
+                        <input type="range" min="0" max="1" step="0.1" value={songFormData.mood?.valence} onChange={e => setSongFormData({ ...songFormData, mood: { ...songFormData.mood!, valence: Number(e.target.value) } })} className="w-full accent-brand h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                      </div>
+                    </div>
+
+                    {/* Lyrics */}
+                    <div className="space-y-2 pt-4 border-t border-white/10">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Letra da Música</label>
+                      <textarea
+                        value={songFormData.lyrics}
+                        onChange={e => setSongFormData({ ...songFormData, lyrics: e.target.value })}
+                        className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none min-h-[150px] font-mono text-sm leading-relaxed"
+                        placeholder="Cole a letra da música aqui..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <button type="submit" className="w-full py-4 bg-white text-black rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-[1.02] transition-all active-press shadow-xl">
+                      <Save className="w-5 h-5" />
+                      {editingSongId ? 'Salvar Alterações' : 'Publicar Música'}
                     </button>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
+              </form>
+            ) : (
+              <form onSubmit={handlePlaylistSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <div className="lg:col-span-6 space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Nome da Playlist</label>
+                    <input required value={playlistFormData.name} onChange={e => setPlaylistFormData({ ...playlistFormData, name: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Descrição</label>
+                    <textarea value={playlistFormData.description} onChange={e => setPlaylistFormData({ ...playlistFormData, description: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none min-h-[100px]" />
+                  </div>
+
+                  <div className="flex items-center gap-3 px-1">
+                    {isAdmin && (
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className={`w-5 h-5 rounded border border-white/20 flex items-center justify-center transition-all ${playlistFormData.isPublic ? 'bg-brand border-brand' : 'bg-transparent'}`}>
+                          {playlistFormData.isPublic && <Check className="w-3.5 h-3.5 text-white" />}
+                        </div>
+                        <input type="checkbox" className="hidden" checked={playlistFormData.isPublic} onChange={e => setPlaylistFormData({ ...playlistFormData, isPublic: e.target.checked })} />
+                        <span className="text-sm font-bold text-zinc-400 group-hover:text-white transition-colors">Playlist Pública</span>
+                      </label>
+                    )}
+                    {!isAdmin && (
+                      <div className="flex items-center gap-2 text-zinc-500 text-xs font-medium bg-white/5 px-3 py-1.5 rounded-full border border-white/5" title="Sua playlist será privada">
+                        <Users className="w-3 h-3" />
+                        <span>Visível apenas para você</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Upload de Capa (Playlist) ── */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Capa da Playlist</label>
+                      <button
+                        type="button"
+                        onClick={() => setCoverInputMode(prev => prev === 'upload' ? 'url' : 'upload')}
+                        className="text-[10px] font-bold uppercase tracking-widest text-brand-light hover:text-white transition-colors px-2 py-1 rounded bg-white/5 hover:bg-white/10"
+                      >
+                        {coverInputMode === 'upload' ? '📎 Colar URL' : '📤 Upload'}
+                      </button>
+                    </div>
+                    {coverInputMode === 'url' ? (
+                      <input value={playlistFormData.coverUrl} onChange={e => setPlaylistFormData({ ...playlistFormData, coverUrl: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="https://example.com/cover.jpg" />
+                    ) : (
+                      <div
+                        onDrop={e => handleDrop(e, 'image')}
+                        onDragOver={handleDragOver}
+                        className={`relative border-2 border-dashed rounded-xl p-4 transition-all cursor-pointer hover:border-brand/50 hover:bg-brand/5 ${playlistFormData.coverUrl ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-white/10'
+                          }`}
+                        onClick={() => document.getElementById('playlist-cover-upload')?.click()}
+                      >
+                        <input
+                          id="playlist-cover-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(file, 'image');
+                          }}
+                        />
+                        {isUploadingImage ? (
+                          <div className="flex flex-col items-center gap-2 text-brand-light py-4">
+                            <Loader2 className="w-8 h-8 animate-spin" />
+                            <span className="text-xs font-bold uppercase tracking-widest">Enviando imagem...</span>
+                          </div>
+                        ) : playlistFormData.coverUrl ? (
+                          <div className="flex items-center gap-4">
+                            <img src={playlistFormData.coverUrl} alt="Preview" className="w-20 h-20 rounded-lg object-cover border border-white/10 shadow-lg" />
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 text-emerald-400">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-sm font-bold">Capa carregada</span>
+                              </div>
+                              <span className="text-[10px] text-zinc-500">Clique para trocar</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-zinc-400 py-4">
+                            <ImageIcon className="w-8 h-8" />
+                            <span className="text-sm font-bold">Arraste a imagem aqui ou clique para selecionar</span>
+                            <span className="text-[10px] text-zinc-600">JPG, PNG, WebP • Máx 50MB</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="submit" className="w-full py-4 bg-brand text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-[1.02] transition-all shadow-xl shadow-brand/20">
+                    <Save className="w-5 h-5" />
+                    {editingPlaylistId ? 'Atualizar Playlist' : 'Criar Playlist'}
+                  </button>
+                </div>
+                <div className="lg:col-span-6 space-y-4">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Vincular Músicas ({playlistFormData.songIds?.length})</label>
+                  <div className="max-h-[500px] overflow-y-auto space-y-2 scrollbar-thin pr-2 bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                    {songs.map(song => (
+                      <button type="button" key={song.id} onClick={() => toggleSongInPlaylist(song.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${playlistFormData.songIds?.includes(song.id) ? 'bg-brand/10 border-brand/50 shadow-inner' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]'}`}>
+                        <img src={song.coverUrl} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="truncate text-sm font-bold text-white">{song.title}</div>
+                          <div className="truncate text-xs text-zinc-500">{song.artist}</div>
+                        </div>
+                        {playlistFormData.songIds?.includes(song.id) && <Check className="w-4 h-4 text-brand-light flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        )
+      }
 
       {/* List Search */}
       <div className="space-y-6">
@@ -816,8 +968,10 @@ const CMSView: React.FC<CMSViewProps> = ({
               <thead>
                 <tr className="border-b border-white/5 text-zinc-500 text-[10px] uppercase tracking-[0.2em] font-black">
                   <th className="px-8 py-5">Faixa</th>
-                  <th className="px-6 py-5 hidden md:table-cell">Energy</th>
-                  <th className="px-8 py-5 text-right">Ações</th>
+                  <th className="px-6 py-5">Álbum</th>
+                  <th className="px-6 py-5">Gênero</th>
+                  <th className="px-6 py-5 hidden md:table-cell">Mood</th>
+                  <th className="px-8 py-5 text-right w-32">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.02]">
@@ -830,8 +984,17 @@ const CMSView: React.FC<CMSViewProps> = ({
                         <div className="text-zinc-500 text-xs truncate">{song.artist}</div>
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-sm text-zinc-400 truncate max-w-[150px]">{song.album || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-zinc-400 truncate max-w-[150px]">
+                      {song.genre ? <span className="bg-white/5 px-2 py-1 rounded-md border border-white/5 text-xs">{song.genre}</span> : <span className="text-zinc-600">-</span>}
+                    </td>
                     <td className="px-6 py-4 hidden md:table-cell">
-                      <div className="w-24 h-1 bg-white/5 rounded-full"><div className="h-full bg-brand-light" style={{ width: `${song.mood.energy * 100}%` }} /></div>
+                      <div className="flex flex-col gap-1 w-24">
+                        <div className="flex justify-between text-[10px] text-zinc-500"><span>E</span><span>{Math.round(song.mood.energy * 100)}%</span></div>
+                        <div className="h-1 bg-white/5 rounded-full"><div className="h-full bg-purple-500" style={{ width: `${song.mood.energy * 100}%` }} /></div>
+                        <div className="flex justify-between text-[10px] text-zinc-500 mt-1"><span>V</span><span>{Math.round(song.mood.valence * 100)}%</span></div>
+                        <div className="h-1 bg-white/5 rounded-full"><div className="h-full bg-blue-500" style={{ width: `${song.mood.valence * 100}%` }} /></div>
+                      </div>
                     </td>
                     <td className="px-8 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -873,7 +1036,7 @@ const CMSView: React.FC<CMSViewProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 

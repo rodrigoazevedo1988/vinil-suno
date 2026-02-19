@@ -11,6 +11,10 @@ interface PlaylistViewProps {
   currentSong: Song | null;
   onPlay: (song: Song) => void;
   onToggleFavorite: (song: Song) => void;
+  playlists?: Playlist[];
+  onAddToQueue?: (song: Song) => void;
+  onAddToPlaylist?: (songId: string, playlistId: string) => void;
+  onCreatePlaylist?: () => void;
 }
 
 const PlaylistView: React.FC<PlaylistViewProps> = ({
@@ -19,7 +23,8 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
   isPlaying,
   currentSong,
   onPlay,
-  onToggleFavorite
+  onToggleFavorite,
+  playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { }
 }) => {
   const [viewMode, setViewMode] = useState<'compact' | 'list'>('compact');
 
@@ -140,6 +145,10 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
                   isCurrent={currentSong?.id === song.id}
                   onPlay={onPlay}
                   onToggleFavorite={onToggleFavorite}
+                  playlists={playlists}
+                  onAddToQueue={onAddToQueue}
+                  onAddToPlaylist={onAddToPlaylist}
+                  onCreatePlaylist={onCreatePlaylist}
                 />
               ))}
             </div>
@@ -151,6 +160,10 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
               isPlaying={isPlaying}
               onPlay={onPlay}
               onToggleFavorite={onToggleFavorite}
+              playlists={playlists}
+              onAddToQueue={onAddToQueue}
+              onAddToPlaylist={onAddToPlaylist}
+              onCreatePlaylist={onCreatePlaylist}
             />
           )}
         </>

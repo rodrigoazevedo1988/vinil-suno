@@ -44,9 +44,9 @@ export interface SongPayload {
 }
 
 export const songsApi = {
-    getAll: () => request<any[]>('/songs'),
+    getAll: (userId?: string) => request<any[]>(userId ? `/songs?userId=${userId}` : '/songs'),
 
-    getById: (id: string) => request<any>(`/songs/${id}`),
+    getById: (id: string, userId?: string) => request<any>(userId ? `/songs/${id}?userId=${userId}` : `/songs/${id}`),
 
     create: (data: SongPayload) => request<any>('/songs', {
         method: 'POST',
@@ -58,8 +58,9 @@ export const songsApi = {
         body: JSON.stringify(data),
     }),
 
-    toggleFavorite: (id: string) => request<any>(`/songs/${id}/favorite`, {
+    toggleFavorite: (id: string, userId: string) => request<any>(`/songs/${id}/favorite`, {
         method: 'PATCH',
+        body: JSON.stringify({ userId }),
     }),
 
     delete: (id: string) => request<{ success: boolean }>(`/songs/${id}`, {

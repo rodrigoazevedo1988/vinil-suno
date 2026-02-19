@@ -8,7 +8,9 @@ import { initDatabase } from './db.js';
 import songsRouter from './routes/songs.js';
 import playlistsRouter from './routes/playlists.js';
 import uploadRouter from './routes/upload.js';
+import statsRouter from './routes/stats.js';
 import authRouter from './routes/auth.js';
+import radioRouter from './routes/radio.js';
 
 dotenv.config();
 
@@ -16,6 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1); // Confiar no Nginx (essencial para HTTPS e IPs corretos)
 const PORT = parseInt(process.env.PORT || '5043');
 
 // Middleware
@@ -35,6 +38,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/songs', songsRouter);
 app.use('/api/playlists', playlistsRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/radio', radioRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {

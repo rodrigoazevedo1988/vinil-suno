@@ -10,7 +10,7 @@ interface PlaylistListTableProps {
 const PlaylistListTable: React.FC<PlaylistListTableProps> = ({ playlists, onClick }) => {
     return (
         <div className="animate-fade-in">
-            <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-4 px-4 py-2 border-b border-white/[0.08] text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2 items-center">
+            <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-4 px-4 py-2 border-b border-black/10 dark:border-white/[0.08] text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-2 items-center">
                 <div className="w-8 text-center">#</div>
                 <div>Playlist</div>
                 <div className="hidden md:block">Descrição</div>
@@ -22,10 +22,10 @@ const PlaylistListTable: React.FC<PlaylistListTableProps> = ({ playlists, onClic
                     <div
                         key={playlist.id}
                         onClick={() => onClick(playlist.id)}
-                        className="group grid grid-cols-[auto_1fr_1fr_auto] gap-4 px-4 py-3 rounded-lg items-center hover:bg-white/[0.04] transition-colors cursor-pointer"
+                        className="group grid grid-cols-[auto_1fr_1fr_auto] gap-4 px-4 py-3 rounded-lg items-center hover:bg-black/[0.03] dark:hover:bg-white/[0.04] transition-colors cursor-pointer"
                     >
                         {/* Index */}
-                        <div className="w-8 text-center text-sm font-medium text-zinc-500">
+                        <div className="w-8 text-center text-sm font-medium text-slate-400 dark:text-zinc-500">
                             {index + 1}
                         </div>
 
@@ -37,17 +37,17 @@ const PlaylistListTable: React.FC<PlaylistListTableProps> = ({ playlists, onClic
                                 alt={playlist.name}
                             />
                             <div className="min-w-0 flex-1">
-                                <div className="font-bold truncate text-sm text-white group-hover:text-brand transition-colors">{playlist.name}</div>
+                                <div className="font-bold truncate text-sm text-slate-900 dark:text-white group-hover:text-brand transition-colors">{playlist.name}</div>
                             </div>
                         </div>
 
                         {/* Description */}
-                        <div className="hidden md:flex items-center text-sm text-zinc-400 group-hover:text-white transition-colors truncate">
+                        <div className="hidden md:flex items-center text-sm text-slate-500 dark:text-zinc-400 group-hover:text-slate-700 dark:group-hover:text-white transition-colors truncate">
                             {playlist.description || '-'}
                         </div>
 
                         {/* Song Count */}
-                        <div className="w-24 flex items-center justify-end gap-2 text-sm text-zinc-500 font-tabular-nums">
+                        <div className="w-24 flex items-center justify-end gap-2 text-sm text-slate-400 dark:text-zinc-500 font-tabular-nums">
                             <span>{playlist.songIds?.length || 0}</span>
                             <ListMusic className="w-4 h-4 opacity-50" />
                         </div>

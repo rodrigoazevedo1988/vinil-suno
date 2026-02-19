@@ -8,6 +8,11 @@ import CMSView from './components/CMSView';
 import Player from './components/Player';
 import LoginPage from './components/LoginPage';
 import ProfileView from './components/ProfileView';
+import TermsView from './components/TermsView';
+import LandingPage from './components/LandingPage';
+import RadioView from './components/RadioView';
+import SongContextMenu from './components/SongContextMenu';
+import QueueList from './components/QueueList';
 import { SONGS as INITIAL_SONGS, PLAYLISTS as INITIAL_PLAYLISTS } from './constants';
 import { Song, Playlist } from './types';
 import { getTrackMood, ThemeColors } from './utils/theme';
@@ -71,11 +76,29 @@ function App() {
   const handleLogin = (token: string, user: any) => {
     setAuthToken(token);
     setAuthUser(user);
+    setAuthUser(user);
     localStorage.setItem('vinil_auth_token', token);
     localStorage.setItem('vinil_auth_user', JSON.stringify(user));
+
+    // Check pending share
+    const pendingShareId = sessionStorage.getItem('pendingShareId');
+    if (pendingShareId) {
+      // We need songs loaded first, handled by effect
+    }
   };
 
   const handleLogout = () => {
+    // Stop music playback on logout
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    setIsPlaying(false);
+    setCurrentSong(null);
+    setQueue([]);
+    setIsPlayerExpanded(false);
+    setIsQueueOpen(false);
+
     setAuthToken(null);
     setAuthUser(null);
     localStorage.removeItem('vinil_auth_token');
@@ -89,7 +112,11 @@ function App() {
     return (saved as 'light' | 'dark') || 'dark';
   });
 
-  const [currentView, setCurrentView] = useState('home');
+  const [currentView, setCurrentView] = useState(() => {
+    if (window.location.pathname === '/termos') return 'terms';
+    if (window.location.pathname === '/lp') return 'lp';
+    return 'home';
+  });
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [selectedMoodId, setSelectedMoodId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,17 +154,59 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(0.8);
+
+
+  const [volume, setVolume] = useState(0.5);
+  const [queue, setQueue] = useState<Song[]>([]);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
+  const [isShuffle, setIsShuffle] = useState(false);
 
   const moodTheme: ThemeColors = useMemo(() => getTrackMood(currentSong), [currentSong]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load data from API on mount
+  // Check for share link on load
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#share=')) {
+      const shareId = hash.replace('#share=', '');
+      if (isLoggedIn && songs.length > 0) {
+        const sharedSong = songs.find(s => s.id === shareId);
+        if (sharedSong) {
+          handlePlaySong(sharedSong);
+          window.location.hash = ''; // Clear hash
+        }
+      } else if (!isLoggedIn) {
+        sessionStorage.setItem('pendingShareId', shareId);
+        // Allow login flow to proceed naturally
+      }
+    }
+  }, [isLoggedIn, songs]);
+
+  const handleCreatePlaylist = async () => {
+    if (!authUser) return;
+    const newPlaylist: Playlist = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: 'Nova Playlist',
+      description: '',
+      coverUrl: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=400',
+      songIds: [],
+      ownerId: authUser.id,
+      isPublic: false
+    };
+    setPlaylists(prev => [newPlaylist, ...prev]);
+    if (apiAvailable) { try { await playlistsApi.create(newPlaylist); } catch (e) { console.error(e); } }
+    setSelectedPlaylistId(newPlaylist.id);
+    setCurrentView('playlists');
+    // We assume default edit mode opens if selecting a new playlist inside PlaylistView - needs check but creating is key now.
+  };
+
+  // Load data from API on mount and when user changes (login/logout)
   useEffect(() => {
     async function loadData() {
       try {
         const [songsData, playlistsData] = await Promise.all([
-          songsApi.getAll(),
+          songsApi.getAll(authUser?.id),
           playlistsApi.getAll(authUser?.id),
         ]);
         setSongs(songsData);
@@ -157,7 +226,7 @@ function App() {
       }
     }
     loadData();
-  }, []);
+  }, [authUser?.id]);
 
   useEffect(() => {
     audioRef.current = new Audio();
@@ -187,6 +256,24 @@ function App() {
     }
   }, [currentSong, isPlaying]);
 
+  const handleSongEnd = () => {
+    if (repeatMode === 'one') {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      }
+    } else if (repeatMode === 'off' && !isShuffle && queue.length === 0) {
+      const idx = songs.findIndex(s => s.id === currentSong?.id);
+      if (idx === songs.length - 1) {
+        setIsPlaying(false);
+        return;
+      }
+      handleNext();
+    } else {
+      handleNext();
+    }
+  };
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -195,12 +282,12 @@ function App() {
       setProgress((audio.currentTime / (audio.duration || 1)) * 100);
     };
     audio.addEventListener('timeupdate', updateProgress);
-    audio.addEventListener('ended', handleNext);
+    audio.addEventListener('ended', handleSongEnd);
     return () => {
       audio.removeEventListener('timeupdate', updateProgress);
-      audio.removeEventListener('ended', handleNext);
+      audio.removeEventListener('ended', handleSongEnd);
     };
-  }, [currentSong, songs]);
+  }, [currentSong, songs, repeatMode, isShuffle, queue]);
 
   const handlePlaySong = (song: Song) => {
     if (currentSong?.id === song.id) setIsPlaying(!isPlaying);
@@ -213,13 +300,14 @@ function App() {
   };
 
   const handleToggleFavorite = async (song: Song) => {
+    if (!authUser?.id) return; // Must be logged in
     // Optimistic update
     setSongs(prevSongs =>
       prevSongs.map(s => s.id === song.id ? { ...s, isFavorite: !s.isFavorite } : s)
     );
-    // Sync with API
+    // Sync with API — per-user favorites
     if (apiAvailable) {
-      try { await songsApi.toggleFavorite(song.id); } catch (e) { console.warn('Erro ao favoritar:', e); }
+      try { await songsApi.toggleFavorite(song.id, authUser.id); } catch (e) { console.warn('Erro ao favoritar:', e); }
     }
   };
 
@@ -227,10 +315,36 @@ function App() {
     setRecentlyPlayedIds([]);
   };
 
+  const handleRemoveFromQueue = (index: number) => {
+    setQueue(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePlayFromQueue = (song: Song, index: number) => {
+    // Remove selected song from queue and play it
+    setQueue(prev => prev.filter((_, i) => i !== index));
+    handlePlaySong(song);
+  };
+
   const handleNext = () => {
+    if (queue.length > 0) {
+      const next = queue[0];
+      setQueue(prev => prev.slice(1));
+      setCurrentSong(next);
+      setIsPlaying(true);
+      return;
+    }
     if (!currentSong || songs.length === 0) return;
-    const idx = songs.findIndex(s => s.id === currentSong.id);
-    setCurrentSong(songs[(idx + 1) % songs.length]);
+
+    if (isShuffle) {
+      let nextIndex = Math.floor(Math.random() * songs.length);
+      if (songs.length > 1 && songs[nextIndex].id === currentSong.id) {
+        nextIndex = (nextIndex + 1) % songs.length;
+      }
+      setCurrentSong(songs[nextIndex]);
+    } else {
+      const idx = songs.findIndex(s => s.id === currentSong.id);
+      setCurrentSong(songs[(idx + 1) % songs.length]);
+    }
     setIsPlaying(true);
   };
 
@@ -258,6 +372,34 @@ function App() {
     if (hour < 12) return "Bom dia";
     if (hour < 18) return "Boa tarde";
     return "Boa noite";
+  };
+
+  const handleAddToQueue = (song: Song) => {
+    setQueue(prev => [...prev, song]);
+    // Optionally show toast
+  };
+
+  const handleAddSongToPlaylist = async (songId: string, playlistId: string) => {
+    // Optimistic update
+    setPlaylists(prev => prev.map(p => {
+      if (p.id === playlistId) {
+        return { ...p, songIds: [...(p.songIds || []), songId] };
+      }
+      return p;
+    }));
+
+    // API Call
+    if (apiAvailable) {
+      try {
+        const playlist = playlists.find(p => p.id === playlistId);
+        if (playlist) {
+          const newSongIds = [...(playlist.songIds || []), songId];
+          await playlistsApi.update(playlistId, { songIds: newSongIds });
+        }
+      } catch (e) {
+        console.error('Failed to add to playlist', e);
+      }
+    }
   };
 
   const renderView = () => {
@@ -295,7 +437,7 @@ function App() {
                   <h3 className="text-xl font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Músicas</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                     {filteredSongs.map(song => (
-                      <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />
+                      <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
                     ))}
                   </div>
                 </section>
@@ -319,6 +461,8 @@ function App() {
 
 
     switch (currentView) {
+      case 'lp':
+        return <LandingPage onLoginClick={() => setCurrentView('home')} />;
       case 'cms':
         return <CMSView
           isAdmin={isAdmin}
@@ -326,7 +470,7 @@ function App() {
           songs={songs}
           playlists={playlists}
           apiAvailable={apiAvailable} onAddSong={async (s) => {
-            setSongs([s, ...songs]);
+            setSongs(prev => [s, ...prev]);
             if (apiAvailable) { try { await songsApi.create(s); } catch (e) { console.warn('Erro ao criar música na API:', e); } }
           }} onUpdateSong={async (us) => {
             setSongs(songs.map(s => s.id === us.id ? us : s));
@@ -362,17 +506,17 @@ function App() {
           <div className="space-y-8 animate-fade-in">
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-black">Minha Biblioteca</h2>
-              <div className="flex items-center bg-white/[0.03] rounded-full p-1 border border-white/5">
-                <button onClick={() => setViewMode(p => ({ ...p, library: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'compact' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
-                <button onClick={() => setViewMode(p => ({ ...p, library: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'list' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
+              <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">
+                <button onClick={() => setViewMode(p => ({ ...p, library: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
+                <button onClick={() => setViewMode(p => ({ ...p, library: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.library === 'list' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
               </div>
             </div>
             {viewMode.library === 'compact' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                {songs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />)}
+                {songs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />)}
               </div>
             ) : (
-              <SongListTable songs={songs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />
+              <SongListTable songs={songs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
             )}
           </div>
         );
@@ -386,19 +530,19 @@ function App() {
                 Suas Favoritas
               </h2>
               {favoriteSongs.length > 0 && (
-                <div className="flex items-center bg-white/[0.03] rounded-full p-1 border border-white/5">
-                  <button onClick={() => setViewMode(p => ({ ...p, favorites: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.favorites === 'compact' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
-                  <button onClick={() => setViewMode(p => ({ ...p, favorites: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.favorites === 'list' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
+                <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">
+                  <button onClick={() => setViewMode(p => ({ ...p, favorites: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.favorites === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
+                  <button onClick={() => setViewMode(p => ({ ...p, favorites: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.favorites === 'list' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
                 </div>
               )}
             </div>
             {favoriteSongs.length > 0 ? (
               viewMode.favorites === 'compact' ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                  {favoriteSongs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />)}
+                  {favoriteSongs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />)}
                 </div>
               ) : (
-                <SongListTable songs={favoriteSongs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />
+                <SongListTable songs={favoriteSongs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
               )
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
@@ -413,9 +557,9 @@ function App() {
           <div className="space-y-8 animate-fade-in">
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-black">Suas Playlists</h2>
-              <div className="flex items-center bg-white/[0.03] rounded-full p-1 border border-white/5">
-                <button onClick={() => setViewMode(p => ({ ...p, playlists: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.playlists === 'compact' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
-                <button onClick={() => setViewMode(p => ({ ...p, playlists: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.playlists === 'list' ? 'bg-white/10 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
+              <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5">
+                <button onClick={() => setViewMode(p => ({ ...p, playlists: 'compact' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.playlists === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><LayoutGrid className="w-4 h-4" /> Compacto</button>
+                <button onClick={() => setViewMode(p => ({ ...p, playlists: 'list' }))} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.playlists === 'list' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}><List className="w-4 h-4" /> Lista</button>
               </div>
             </div>
             {viewMode.playlists === 'compact' ? (
@@ -433,6 +577,8 @@ function App() {
             )}
           </div>
         );
+      case 'radio':
+        return <RadioView />;
       case 'moods':
         const moodCategories = [
           { id: 'energy', label: 'Energia Pura', color: 'bg-gradient-to-br from-orange-500 to-red-600', filter: (s: Song) => s.mood.energy >= 0.7 },
@@ -449,15 +595,15 @@ function App() {
 
           return (
             <div className="space-y-8 animate-fade-in">
-              <div className="flex items-center gap-4 border-b border-white/5 pb-6">
+              <div className="flex items-center gap-4 border-b border-black/5 dark:border-white/5 pb-6">
                 <button
                   onClick={() => setSelectedMoodId(null)}
-                  className="p-3 rounded-full hover:bg-white/10 transition-colors"
+                  className="p-3 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 >
                   <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div className="flex flex-col">
-                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">MOOD</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500">MOOD</span>
                   <h1 className="text-4xl font-black tracking-tight">{category?.label}</h1>
                 </div>
               </div>
@@ -465,7 +611,7 @@ function App() {
               {moodSongs.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                   {moodSongs.map(song => (
-                    <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} />
+                    <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
                   ))}
                 </div>
               ) : (
@@ -516,7 +662,12 @@ function App() {
 
       case 'playlist-detail':
         const pl = playlists.find(p => p.id === selectedPlaylistId);
-        return pl ? <PlaylistView playlist={pl} allSongs={songs} isPlaying={isPlaying} currentSong={currentSong} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} /> : null;
+        return pl ? <PlaylistView playlist={pl} allSongs={songs} isPlaying={isPlaying} currentSong={currentSong} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} /> : null;
+      case 'terms':
+        return <TermsView onBack={() => {
+          window.history.pushState({}, '', '/');
+          setCurrentView(isLoggedIn ? 'home' : 'login');
+        }} />;
       default:
         const recentSongs = recentlyPlayedIds
           .map(id => songs.find(s => s.id === id))
@@ -534,7 +685,7 @@ function App() {
               <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white">
                 {getGreeting()}, {authUser?.name || 'Ouvinte'}
               </h1>
-              <p className="text-zinc-500 font-medium text-lg">
+              <p className="text-slate-500 dark:text-zinc-500 font-medium text-lg">
                 {apiAvailable ? 'O que vamos ouvir agora?' : 'Modo offline — dados locais'}
               </p>
             </header>
@@ -562,6 +713,10 @@ function App() {
                       isCurrent={currentSong?.id === song.id}
                       onPlay={handlePlaySong}
                       onToggleFavorite={handleToggleFavorite}
+                      playlists={playlists}
+                      onAddToQueue={handleAddToQueue}
+                      onAddToPlaylist={handleAddSongToPlaylist}
+                      onCreatePlaylist={handleCreatePlaylist}
                     />
                   ))}
                 </div>
@@ -582,6 +737,10 @@ function App() {
                     isCurrent={currentSong?.id === song.id}
                     onPlay={handlePlaySong}
                     onToggleFavorite={handleToggleFavorite}
+                    playlists={playlists}
+                    onAddToQueue={handleAddToQueue}
+                    onAddToPlaylist={handleAddSongToPlaylist}
+                    onCreatePlaylist={handleCreatePlaylist}
                   />
                 ))}
               </div>
@@ -593,7 +752,28 @@ function App() {
 
   // ─── Login Gate ─────────────────────────────────
   if (!isLoggedIn) {
-    return <LoginPage onLogin={handleLogin} />;
+    if (currentView === 'terms') {
+      return (
+        <div className="min-h-screen bg-black text-white p-6 overflow-y-auto">
+          <TermsView onBack={() => {
+            window.history.pushState({}, '', '/');
+            setCurrentView('login');
+          }} />
+        </div>
+      );
+    }
+    if (currentView === 'lp') {
+      return (
+        <LandingPage onLoginClick={() => {
+          window.history.pushState({}, '', '/');
+          setCurrentView('login');
+        }} />
+      );
+    }
+    return <LoginPage onLogin={handleLogin} onTerms={() => {
+      window.history.pushState({}, '', '/termos');
+      setCurrentView('terms');
+    }} />;
   }
 
   return (
@@ -634,10 +814,24 @@ function App() {
         onPrev={handlePrev}
         volume={volume}
         onVolumeChange={setVolume}
-        songs={songs}
         onPlaySong={handlePlaySong}
         isExpanded={isPlayerExpanded}
         onToggleExpand={() => setIsPlayerExpanded(!isPlayerExpanded)}
+        isQueueOpen={isQueueOpen}
+        onToggleQueue={() => setIsQueueOpen(!isQueueOpen)}
+        queueLength={queue.length}
+        repeatMode={repeatMode}
+        onToggleRepeat={() => setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off')}
+        isShuffle={isShuffle}
+        onToggleShuffle={() => setIsShuffle(!isShuffle)}
+      />
+      <QueueList
+        queue={queue}
+        currentSong={currentSong}
+        isOpen={isQueueOpen}
+        onClose={() => setIsQueueOpen(false)}
+        onRemoveFromQueue={handleRemoveFromQueue}
+        onPlayFromQueue={handlePlayFromQueue}
       />
     </div>
   );
