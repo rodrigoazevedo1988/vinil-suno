@@ -14,6 +14,9 @@ interface SongListTableProps {
     onAddToQueue?: (song: Song) => void;
     onAddToPlaylist?: (songId: string, playlistId: string) => void;
     onCreatePlaylist?: () => void;
+    onEditCMS?: (song: Song) => void;
+    isAdmin?: boolean;
+    startIndex?: number;
 }
 
 const SongListTable: React.FC<SongListTableProps> = ({
@@ -22,7 +25,8 @@ const SongListTable: React.FC<SongListTableProps> = ({
     isPlaying,
     onPlay,
     onToggleFavorite,
-    playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { }
+    playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { },
+    onEditCMS, isAdmin = false, startIndex = 0
 }) => {
     const formatTime = (sec: number) => {
         const min = Math.floor(sec / 60);
@@ -57,7 +61,7 @@ const SongListTable: React.FC<SongListTableProps> = ({
                             {/* Index / Play Button */}
                             <div className="w-8 text-center text-sm font-medium text-slate-400 dark:text-zinc-500 relative flex justify-center items-center">
                                 <span className={`group-hover:opacity-0 ${isCur ? 'text-brand' : ''}`}>
-                                    {isCur && isPlaying ? <img src="https://open.spotifycdn.com/cdn/images/equaliser-animated-green.f93a2ef4.gif" className="h-3.5" alt="playing" /> : index + 1}
+                                    {isCur && isPlaying ? <img src="https://open.spotifycdn.com/cdn/images/equaliser-animated-green.f93a2ef4.gif" className="h-3.5" alt="playing" /> : startIndex + index + 1}
                                 </span>
                                 <button
                                     onClick={() => onPlay(song)}
@@ -114,6 +118,8 @@ const SongListTable: React.FC<SongListTableProps> = ({
                                     onAddToQueue={onAddToQueue}
                                     onAddToPlaylist={onAddToPlaylist}
                                     onCreatePlaylist={onCreatePlaylist}
+                                    onEditCMS={onEditCMS}
+                                    isAdmin={isAdmin}
                                 />
                             </div>
                         </div>

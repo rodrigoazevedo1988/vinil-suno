@@ -13,11 +13,14 @@ interface MusicCardProps {
   onAddToQueue?: (song: Song) => void;
   onAddToPlaylist?: (songId: string, playlistId: string) => void;
   onCreatePlaylist?: () => void;
+  onEditCMS?: (song: Song) => void;
+  isAdmin?: boolean;
 }
 
 const MusicCard: React.FC<MusicCardProps> = ({
   song, isPlaying, isCurrent, onPlay, onToggleFavorite,
-  playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { }
+  playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { },
+  onEditCMS, isAdmin = false
 }) => {
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -64,6 +67,8 @@ const MusicCard: React.FC<MusicCardProps> = ({
             onAddToQueue={onAddToQueue}
             onAddToPlaylist={onAddToPlaylist}
             onCreatePlaylist={onCreatePlaylist}
+            onEditCMS={onEditCMS}
+            isAdmin={isAdmin}
             triggerClassName="bg-black/20 hover:bg-black/40 text-white backdrop-blur-md shadow-lg"
           />
         </div>

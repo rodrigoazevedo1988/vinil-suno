@@ -3,6 +3,7 @@ import { Play, Clock, Music2, Shuffle, List, LayoutGrid } from 'lucide-react';
 import { Playlist, Song } from '../types';
 import MusicCard from './MusicCard';
 import SongListTable from './SongListTable';
+import Pagination from './Pagination';
 
 interface PlaylistViewProps {
   playlist: Playlist;
@@ -15,6 +16,8 @@ interface PlaylistViewProps {
   onAddToQueue?: (song: Song) => void;
   onAddToPlaylist?: (songId: string, playlistId: string) => void;
   onCreatePlaylist?: () => void;
+  onEditCMS?: (song: Song) => void;
+  isAdmin?: boolean;
 }
 
 const PlaylistView: React.FC<PlaylistViewProps> = ({
@@ -24,9 +27,12 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
   currentSong,
   onPlay,
   onToggleFavorite,
-  playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { }
+  playlists = [], onAddToQueue = () => { }, onAddToPlaylist = () => { }, onCreatePlaylist = () => { },
+  onEditCMS, isAdmin = false
 }) => {
   const [viewMode, setViewMode] = useState<'compact' | 'list'>('compact');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   const playlistSongs = useMemo(() => {
     // Preserve order from playlist.songIds if possible, otherwise just filter
@@ -137,7 +143,7 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
           {viewMode === 'compact' ? (
             /* Grid View */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-6 gap-y-8 animate-fade-in">
-              {playlistSongs.map((song) => (
+              {playlistSongs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((song) => (
                 <MusicCard
                   key={song.id}
                   song={song}
@@ -149,13 +155,15 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
                   onAddToQueue={onAddToQueue}
                   onAddToPlaylist={onAddToPlaylist}
                   onCreatePlaylist={onCreatePlaylist}
+                  onEditCMS={onEditCMS}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
           ) : (
             /* List View */
             <SongListTable
-              songs={playlistSongs}
+              songs={playlistSongs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)}
               currentSong={currentSong}
               isPlaying={isPlaying}
               onPlay={onPlay}
@@ -164,8 +172,16 @@ const PlaylistView: React.FC<PlaylistViewProps> = ({
               onAddToQueue={onAddToQueue}
               onAddToPlaylist={onAddToPlaylist}
               onCreatePlaylist={onCreatePlaylist}
+              onEditCMS={onEditCMS}
+              isAdmin={isAdmin}
+              startIndex={(currentPage - 1) * ITEMS_PER_PAGE}
             />
           )}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(playlistSongs.length / ITEMS_PER_PAGE)}
+            onPageChange={setCurrentPage}
+          />
         </>
       )}
     </div>

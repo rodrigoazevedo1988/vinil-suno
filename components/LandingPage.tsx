@@ -38,7 +38,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
                 {/* Text Content */}
                 <div className="flex-1 space-y-8 animate-slide-up">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-bold uppercase tracking-widest text-purple-300 animate-fade-in">
-                        <Sparkles className="w-3 h-3" /> Nova Versão V5 Disponível
+                        <Disc className="w-3 h-3" /> Nova Versão V5 Disponível
                     </div>
 
                     <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.1]">
@@ -49,7 +49,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
                     </h1>
 
                     <p className="text-lg md:text-xl text-zinc-400 max-w-lg leading-relaxed">
-                        Experimente a revolução musical com IA. Crie, organize e descubra sons que definem o seu momento com a tecnologia Suno AI.
+                        Experimente a revolução da sua biblioteca musical. Organize e descubra sons que definem o seu momento com a mais alta qualidade.
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -101,12 +101,12 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick }) => {
 
                         {/* Floating Elements */}
                         <div className="absolute -top-10 -right-10 p-4 bg-zinc-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-xl flex items-center gap-3 animate-float delay-100 z-30">
-                            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                                <Zap className="w-5 h-5" />
+                            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+                                <Layers className="w-5 h-5" />
                             </div>
                             <div>
-                                <p className="text-xs text-zinc-400 font-bold uppercase">Gerado por IA</p>
-                                <p className="text-sm font-bold text-white">Suno V5</p>
+                                <p className="text-xs text-zinc-400 font-bold uppercase">Streaming</p>
+                                <p className="text-sm font-bold text-white">Versão V5</p>
                             </div>
                         </div>
 

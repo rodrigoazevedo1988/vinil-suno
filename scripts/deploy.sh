@@ -31,7 +31,7 @@ echo "📦 Copiando arquivos necessários..."
 cp docker-compose.yml "$DEPLOY_DIR/"
 cp Dockerfile "$DEPLOY_DIR/"
 cp .dockerignore "$DEPLOY_DIR/"
-cp .env.production "$DEPLOY_DIR/.env"
+cp .env.production "$DEPLOY_DIR/.env" 2>/dev/null || cp .env "$DEPLOY_DIR/.env" 2>/dev/null || echo "NODE_ENV=production" > "$DEPLOY_DIR/.env"
 
 # Copy Nginx config
 mkdir -p "$DEPLOY_DIR/nginx"

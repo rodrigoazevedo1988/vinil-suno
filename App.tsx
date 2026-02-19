@@ -13,6 +13,10 @@ import LandingPage from './components/LandingPage';
 import RadioView from './components/RadioView';
 import SongContextMenu from './components/SongContextMenu';
 import QueueList from './components/QueueList';
+import ArtistsView from './components/ArtistsView';
+import AlbumsView from './components/AlbumsView';
+import GenresView from './components/GenresView';
+import Pagination from './components/Pagination';
 import { SONGS as INITIAL_SONGS, PLAYLISTS as INITIAL_PLAYLISTS } from './constants';
 import { Song, Playlist } from './types';
 import { getTrackMood, ThemeColors } from './utils/theme';
@@ -59,6 +63,8 @@ const BackgroundManager: React.FC<{ currentSong: Song | null; currentTheme: Them
     </div>
   );
 };
+
+const ITEMS_PER_PAGE = 50;
 
 function App() {
   // ─── Auth State ─────────────────────────────────
@@ -126,7 +132,18 @@ function App() {
     library: 'compact' | 'list';
     favorites: 'compact' | 'list';
     playlists: 'compact' | 'list';
-  }>({ library: 'compact', favorites: 'compact', playlists: 'compact' });
+    home: 'compact' | 'list';
+  }>({ library: 'compact', favorites: 'compact', playlists: 'compact', home: 'compact' });
+  const [pagination, setPagination] = useState<{
+    library: number;
+    favorites: number;
+    playlists: number;
+    home: number;
+    moods: number;
+    searchSongs: number;
+    searchPlaylists: number;
+  }>({ library: 1, favorites: 1, playlists: 1, home: 1, moods: 1, searchSongs: 1, searchPlaylists: 1 });
+
 
   // Sync with HTML class
   useEffect(() => {
@@ -137,6 +154,13 @@ function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+
+  const [cmsEditTarget, setCmsEditTarget] = useState<Song | null>(null);
+
+  const handleEditCMS = (song: Song) => {
+    setCmsEditTarget(song);
+    setCurrentView('cms');
+  };
 
   // Dynamic Data State
   // Dynamic Data State
@@ -164,6 +188,19 @@ function App() {
 
   const moodTheme: ThemeColors = useMemo(() => getTrackMood(currentSong), [currentSong]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const dailySongs = useMemo(() => {
+    return [...songs].sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    }).slice(0, 30);
+  }, [songs]);
+
+  const paginate = useCallback((items: any[], currentPage: number) => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return items.slice(start, start + ITEMS_PER_PAGE);
+  }, []);
 
   // Check for share link on load
   useEffect(() => {
@@ -360,6 +397,9 @@ function App() {
     setSearchQuery(''); // Clear search on navigation
     setSelectedMoodId(null);
     setIsPlayerExpanded(false); // Close expanded player on navigation
+    if (view !== 'cms') {
+      setCmsEditTarget(null);
+    }
     if (id) {
       setSelectedPlaylistId(id);
     } else if (view !== 'playlist-detail') {
@@ -436,10 +476,15 @@ function App() {
                 <section className="space-y-6">
                   <h3 className="text-xl font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Músicas</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                    {filteredSongs.map(song => (
-                      <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
+                    {paginate(filteredSongs, pagination.searchSongs).map((song: Song) => (
+                      <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} />
                     ))}
                   </div>
+                  <Pagination
+                    currentPage={pagination.searchSongs}
+                    totalPages={Math.ceil(filteredSongs.length / ITEMS_PER_PAGE)}
+                    onPageChange={page => setPagination({ ...pagination, searchSongs: page })}
+                  />
                 </section>
               )}
 
@@ -447,10 +492,15 @@ function App() {
                 <section className="space-y-6">
                   <h3 className="text-xl font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Playlists</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                    {filteredPlaylists.map(playlist => (
+                    {paginate(filteredPlaylists, pagination.searchPlaylists).map((playlist: Playlist) => (
                       <PlaylistCard key={playlist.id} playlist={playlist} onClick={() => handleNavigate('playlist-detail', playlist.id)} />
                     ))}
                   </div>
+                  <Pagination
+                    currentPage={pagination.searchPlaylists}
+                    totalPages={Math.ceil(filteredPlaylists.length / ITEMS_PER_PAGE)}
+                    onPageChange={page => setPagination({ ...pagination, searchPlaylists: page })}
+                  />
                 </section>
               )}
             </div>
@@ -458,6 +508,7 @@ function App() {
         </div>
       );
     }
+
 
 
     switch (currentView) {
@@ -469,6 +520,7 @@ function App() {
           currentUser={authUser}
           songs={songs}
           playlists={playlists}
+          initialEditSong={cmsEditTarget}
           apiAvailable={apiAvailable} onAddSong={async (s) => {
             setSongs(prev => [s, ...prev]);
             if (apiAvailable) { try { await songsApi.create(s); } catch (e) { console.warn('Erro ao criar música na API:', e); } }
@@ -513,11 +565,16 @@ function App() {
             </div>
             {viewMode.library === 'compact' ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                {songs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />)}
+                {paginate(songs, pagination.library).map((song: Song) => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} />)}
               </div>
             ) : (
-              <SongListTable songs={songs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
+              <SongListTable songs={paginate(songs, pagination.library)} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} startIndex={(pagination.library - 1) * ITEMS_PER_PAGE} />
             )}
+            <Pagination
+              currentPage={pagination.library}
+              totalPages={Math.ceil(songs.length / ITEMS_PER_PAGE)}
+              onPageChange={page => setPagination({ ...pagination, library: page })}
+            />
           </div>
         );
       case 'favorites':
@@ -537,13 +594,20 @@ function App() {
               )}
             </div>
             {favoriteSongs.length > 0 ? (
-              viewMode.favorites === 'compact' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                  {favoriteSongs.map(song => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />)}
-                </div>
-              ) : (
-                <SongListTable songs={favoriteSongs} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
-              )
+              <>
+                {viewMode.favorites === 'compact' ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                    {paginate(favoriteSongs, pagination.favorites).map((song: Song) => <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} />)}
+                  </div>
+                ) : (
+                  <SongListTable songs={paginate(favoriteSongs, pagination.favorites)} currentSong={currentSong} isPlaying={isPlaying} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} startIndex={(pagination.favorites - 1) * ITEMS_PER_PAGE} />
+                )}
+                <Pagination
+                  currentPage={pagination.favorites}
+                  totalPages={Math.ceil(favoriteSongs.length / ITEMS_PER_PAGE)}
+                  onPageChange={page => setPagination({ ...pagination, favorites: page })}
+                />
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
                 <Frown className="w-16 h-16 opacity-20" />
@@ -564,7 +628,7 @@ function App() {
             </div>
             {viewMode.playlists === 'compact' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {playlists.map(playlist => (
+                {paginate(playlists, pagination.playlists).map((playlist: Playlist) => (
                   <PlaylistCard
                     key={playlist.id}
                     playlist={playlist}
@@ -573,12 +637,65 @@ function App() {
                 ))}
               </div>
             ) : (
-              <PlaylistListTable playlists={playlists} onClick={(id) => handleNavigate('playlist-detail', id)} />
+              <PlaylistListTable playlists={paginate(playlists, pagination.playlists)} onClick={(id) => handleNavigate('playlist-detail', id)} />
             )}
+            <Pagination
+              currentPage={pagination.playlists}
+              totalPages={Math.ceil(playlists.length / ITEMS_PER_PAGE)}
+              onPageChange={page => setPagination({ ...pagination, playlists: page })}
+            />
           </div>
         );
       case 'radio':
         return <RadioView />;
+      case 'artists':
+        return (
+          <ArtistsView
+            songs={songs}
+            playlists={playlists}
+            isPlaying={isPlaying}
+            currentSong={currentSong}
+            onPlay={handlePlaySong}
+            onToggleFavorite={handleToggleFavorite}
+            onAddToQueue={handleAddToQueue}
+            onAddToPlaylist={handleAddSongToPlaylist}
+            onCreatePlaylist={handleCreatePlaylist}
+            isAdmin={isAdmin}
+            onEditCMS={handleEditCMS}
+          />
+        );
+      case 'albums':
+        return (
+          <AlbumsView
+            songs={songs}
+            playlists={playlists}
+            isPlaying={isPlaying}
+            currentSong={currentSong}
+            onPlay={handlePlaySong}
+            onToggleFavorite={handleToggleFavorite}
+            onAddToQueue={handleAddToQueue}
+            onAddToPlaylist={handleAddSongToPlaylist}
+            onCreatePlaylist={handleCreatePlaylist}
+            isAdmin={isAdmin}
+            onEditCMS={handleEditCMS}
+          />
+        );
+      case 'genres':
+        return (
+          <GenresView
+            songs={songs}
+            playlists={playlists}
+            isPlaying={isPlaying}
+            currentSong={currentSong}
+            onPlay={handlePlaySong}
+            onToggleFavorite={handleToggleFavorite}
+            onAddToQueue={handleAddToQueue}
+            onAddToPlaylist={handleAddSongToPlaylist}
+            onCreatePlaylist={handleCreatePlaylist}
+            isAdmin={isAdmin}
+            onEditCMS={handleEditCMS}
+          />
+        );
       case 'moods':
         const moodCategories = [
           { id: 'energy', label: 'Energia Pura', color: 'bg-gradient-to-br from-orange-500 to-red-600', filter: (s: Song) => s.mood.energy >= 0.7 },
@@ -609,11 +726,18 @@ function App() {
               </div>
 
               {moodSongs.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                  {moodSongs.map(song => (
-                    <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} />
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                    {paginate(moodSongs, pagination.moods).map((song: Song) => (
+                      <MusicCard key={song.id} song={song} isPlaying={isPlaying} isCurrent={currentSong?.id === song.id} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} />
+                    ))}
+                  </div>
+                  <Pagination
+                    currentPage={pagination.moods}
+                    totalPages={Math.ceil(moodSongs.length / ITEMS_PER_PAGE)}
+                    onPageChange={page => setPagination({ ...pagination, moods: page })}
+                  />
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-4">
                   <Sparkles className="w-16 h-16 opacity-20" />
@@ -662,7 +786,7 @@ function App() {
 
       case 'playlist-detail':
         const pl = playlists.find(p => p.id === selectedPlaylistId);
-        return pl ? <PlaylistView playlist={pl} allSongs={songs} isPlaying={isPlaying} currentSong={currentSong} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} /> : null;
+        return pl ? <PlaylistView playlist={pl} allSongs={songs} isPlaying={isPlaying} currentSong={currentSong} onPlay={handlePlaySong} onToggleFavorite={handleToggleFavorite} playlists={playlists} onAddToQueue={handleAddToQueue} onAddToPlaylist={handleAddSongToPlaylist} onCreatePlaylist={handleCreatePlaylist} isAdmin={isAdmin} onEditCMS={handleEditCMS} /> : null;
       case 'terms':
         return <TermsView onBack={() => {
           window.history.pushState({}, '', '/');
@@ -681,13 +805,29 @@ function App() {
                 <span className="text-lg font-bold">Carregando biblioteca...</span>
               </div>
             )}
-            <header className="space-y-2">
-              <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white">
-                {getGreeting()}, {authUser?.name || 'Ouvinte'}
-              </h1>
-              <p className="text-slate-500 dark:text-zinc-500 font-medium text-lg">
-                {apiAvailable ? 'O que vamos ouvir agora?' : 'Modo offline — dados locais'}
-              </p>
+            <header className="space-y-2 flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="space-y-2">
+                <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white">
+                  {getGreeting()}, {authUser?.name || 'Ouvinte'}
+                </h1>
+                <p className="text-slate-500 dark:text-zinc-500 font-medium text-lg">
+                  {apiAvailable ? 'O que vamos ouvir agora?' : 'Modo offline — dados locais'}
+                </p>
+              </div>
+              <div className="flex items-center bg-black/[0.03] dark:bg-white/[0.03] rounded-full p-1 border border-black/5 dark:border-white/5 w-fit">
+                <button
+                  onClick={() => setViewMode(p => ({ ...p, home: 'compact' }))}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.home === 'compact' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
+                >
+                  <LayoutGrid className="w-4 h-4" /> Compacto
+                </button>
+                <button
+                  onClick={() => setViewMode(p => ({ ...p, home: 'list' }))}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${viewMode.home === 'list' ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'}`}
+                >
+                  <List className="w-4 h-4" /> Lista
+                </button>
+              </div>
             </header>
 
             {recentSongs.length > 0 && (
@@ -704,8 +844,57 @@ function App() {
                     <Trash2 className="w-3.5 h-3.5" /> Limpar
                   </button>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                  {recentSongs.map(song => (
+                {viewMode.home === 'compact' ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                    {paginate(recentSongs, pagination.home).map((song: Song) => (
+                      <MusicCard
+                        key={song.id}
+                        song={song}
+                        isPlaying={isPlaying}
+                        isCurrent={currentSong?.id === song.id}
+                        onPlay={handlePlaySong}
+                        onToggleFavorite={handleToggleFavorite}
+                        playlists={playlists}
+                        onAddToQueue={handleAddToQueue}
+                        onAddToPlaylist={handleAddSongToPlaylist}
+                        onCreatePlaylist={handleCreatePlaylist}
+                        isAdmin={isAdmin}
+                        onEditCMS={handleEditCMS}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <SongListTable
+                    songs={paginate(recentSongs, pagination.home)}
+                    currentSong={currentSong}
+                    isPlaying={isPlaying}
+                    onPlay={handlePlaySong}
+                    onToggleFavorite={handleToggleFavorite}
+                    playlists={playlists}
+                    onAddToQueue={handleAddToQueue}
+                    onAddToPlaylist={handleAddSongToPlaylist}
+                    onCreatePlaylist={handleCreatePlaylist}
+                    isAdmin={isAdmin}
+                    onEditCMS={handleEditCMS}
+                    startIndex={(pagination.home - 1) * ITEMS_PER_PAGE}
+                  />
+                )}
+                <Pagination
+                  currentPage={pagination.home}
+                  totalPages={Math.ceil(recentSongs.length / ITEMS_PER_PAGE)}
+                  onPageChange={page => setPagination({ ...pagination, home: page })}
+                />
+              </section>
+            )}
+
+            <section className="space-y-8">
+              <div className="flex items-center gap-3">
+                <Activity className="w-8 h-8 text-brand-light" />
+                <h2 className="text-3xl md:text-4xl font-black tracking-tight">Descobertas Diárias</h2>
+              </div>
+              {viewMode.home === 'compact' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                  {dailySongs.map(song => (
                     <MusicCard
                       key={song.id}
                       song={song}
@@ -717,33 +906,27 @@ function App() {
                       onAddToQueue={handleAddToQueue}
                       onAddToPlaylist={handleAddSongToPlaylist}
                       onCreatePlaylist={handleCreatePlaylist}
+                      isAdmin={isAdmin}
+                      onEditCMS={handleEditCMS}
                     />
                   ))}
                 </div>
-              </section>
-            )}
-
-            <section className="space-y-8">
-              <div className="flex items-center gap-3">
-                <Activity className="w-8 h-8 text-brand-light" />
-                <h2 className="text-3xl md:text-4xl font-black tracking-tight">Descobertas Diárias</h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                {songs.map(song => (
-                  <MusicCard
-                    key={song.id}
-                    song={song}
-                    isPlaying={isPlaying}
-                    isCurrent={currentSong?.id === song.id}
-                    onPlay={handlePlaySong}
-                    onToggleFavorite={handleToggleFavorite}
-                    playlists={playlists}
-                    onAddToQueue={handleAddToQueue}
-                    onAddToPlaylist={handleAddSongToPlaylist}
-                    onCreatePlaylist={handleCreatePlaylist}
-                  />
-                ))}
-              </div>
+              ) : (
+                <SongListTable
+                  songs={dailySongs}
+                  currentSong={currentSong}
+                  isPlaying={isPlaying}
+                  onPlay={handlePlaySong}
+                  onToggleFavorite={handleToggleFavorite}
+                  playlists={playlists}
+                  onAddToQueue={handleAddToQueue}
+                  onAddToPlaylist={handleAddSongToPlaylist}
+                  onCreatePlaylist={handleCreatePlaylist}
+                  isAdmin={isAdmin}
+                  onEditCMS={handleEditCMS}
+                />
+              )}
+              {/* Limited to 30, no pagination needed for Daily Discoveries as per request */}
             </section>
           </div>
         );

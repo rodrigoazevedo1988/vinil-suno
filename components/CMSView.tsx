@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, Edit2, Save, X, Music, Image as ImageIcon,
   Activity, Download, Upload, Search, CheckCircle, AlertCircle,
@@ -20,6 +20,7 @@ interface CMSViewProps {
   onDeletePlaylist: (id: string) => void;
   currentUser?: any;
   isAdmin?: boolean;
+  initialEditSong?: Song | null;
 }
 
 interface Toast {
@@ -32,12 +33,23 @@ const CMSView: React.FC<CMSViewProps> = ({
   songs, playlists, apiAvailable,
   onAddSong, onUpdateSong, onDeleteSong,
   onCreatePlaylist, onUpdatePlaylist, onDeletePlaylist,
-  currentUser, isAdmin
+  currentUser, isAdmin, initialEditSong
 }) => {
   const [activeTab, setActiveTab] = useState<'songs' | 'playlists'>(isAdmin ? 'songs' : 'playlists');
   const [isAdding, setIsAdding] = useState(false);
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [editingPlaylistId, setEditingPlaylistId] = useState<string | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isAdding && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isAdding, editingSongId, editingPlaylistId]);
+
+
+
+
   const [searchTerm, setSearchTerm] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -136,6 +148,15 @@ const CMSView: React.FC<CMSViewProps> = ({
     isFavorite: false, dateAdded: new Date().toISOString().split('T')[0]
   });
 
+  useEffect(() => {
+    if (initialEditSong) {
+      setActiveTab('songs');
+      setSongFormData(initialEditSong);
+      setEditingSongId(initialEditSong.id);
+      setIsAdding(true);
+    }
+  }, [initialEditSong]);
+
   const durationStr = useMemo(() => {
     const d = songFormData.duration || 0;
     const m = Math.floor(d / 60);
@@ -161,53 +182,7 @@ const CMSView: React.FC<CMSViewProps> = ({
     songIds: [], isPublic: false
   });
 
-  // --- AI Suggestion ---
-  const suggestMoodWithAI = async () => {
-    if (!songFormData.title) {
-      showToast('Insira pelo menos o título para a IA analisar.', 'error');
-      return;
-    }
 
-    setIsAiLoading(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Analise esta música e sugira metadados técnicos.
-        Título: ${songFormData.title}
-        Artista: ${songFormData.artist}
-        Álbum: ${songFormData.album}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              energy: { type: Type.NUMBER, description: "0.0 a 1.0" },
-              valence: { type: Type.NUMBER, description: "0.0 a 1.0" },
-              tempo: { type: Type.NUMBER, description: "BPM aproximado" }
-            },
-            required: ["energy", "valence", "tempo"]
-          }
-        }
-      });
-
-      const result = JSON.parse(response.text || '{}');
-      setSongFormData(prev => ({
-        ...prev,
-        mood: {
-          energy: result.energy || 0.5,
-          valence: result.valence || 0.5,
-          tempo: result.tempo || 120
-        }
-      }));
-      showToast('Sugestão da IA aplicada!');
-    } catch (err) {
-      showToast('Erro ao consultar IA.', 'error');
-      console.error(err);
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
 
   // --- Helpers ---
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -329,7 +304,7 @@ const CMSView: React.FC<CMSViewProps> = ({
         const newSong: Song = {
           id: Math.random().toString(36).substr(2, 9), // Temp ID, backend generates real one usually
           title: title,
-          artist: 'Suno AI V5',
+          artist: 'Vinil Suno',
           album: 'Suno Uploads',
           coverUrl: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=400', // Default placeholder
           audioUrl: uploadData.url,
@@ -378,6 +353,13 @@ const CMSView: React.FC<CMSViewProps> = ({
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Suggestions for autocomplete
+  const suggestions = useMemo(() => ({
+    artists: Array.from(new Set(songs.map(s => s.artist).filter(Boolean))).sort(),
+    albums: Array.from(new Set(songs.map(s => s.album).filter(Boolean))).sort(),
+    genres: Array.from(new Set(songs.map(s => s.genre).filter(Boolean))).sort(),
+  }), [songs]);
 
   const handleSongSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -572,7 +554,7 @@ const CMSView: React.FC<CMSViewProps> = ({
 
       {
         isAdding && (
-          <div className="glass-card rounded-2xl p-8 border border-white/10 animate-scale-in relative overflow-hidden">
+          <div ref={formRef} className="glass-card rounded-2xl p-8 border border-white/10 animate-scale-in relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-brand" />
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -596,17 +578,45 @@ const CMSView: React.FC<CMSViewProps> = ({
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Artista</label>
-                      <input required value={songFormData.artist} onChange={e => setSongFormData({ ...songFormData, artist: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50" placeholder="Suno AI V5" />
+                      <input
+                        required
+                        list="artist-suggestions"
+                        value={songFormData.artist}
+                        onChange={e => setSongFormData({ ...songFormData, artist: e.target.value })}
+                        className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-brand/50"
+                        placeholder="Artista da obra"
+                      />
+                      <datalist id="artist-suggestions">
+                        {suggestions.artists.map(artist => <option key={artist} value={artist} />)}
+                      </datalist>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Álbum</label>
-                      <input value={songFormData.album} onChange={e => setSongFormData({ ...songFormData, album: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Nome do Álbum" />
+                      <input
+                        list="album-suggestions"
+                        value={songFormData.album}
+                        onChange={e => setSongFormData({ ...songFormData, album: e.target.value })}
+                        className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none"
+                        placeholder="Nome do Álbum"
+                      />
+                      <datalist id="album-suggestions">
+                        {suggestions.albums.map(album => <option key={album} value={album} />)}
+                      </datalist>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1">Gênero</label>
-                      <input value={songFormData.genre} onChange={e => setSongFormData({ ...songFormData, genre: e.target.value })} className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none" placeholder="Ex: Sertanejo" />
+                      <input
+                        list="genre-suggestions"
+                        value={songFormData.genre}
+                        onChange={e => setSongFormData({ ...songFormData, genre: e.target.value })}
+                        className="w-full glass-input px-4 py-3 rounded-xl text-white outline-none"
+                        placeholder="Ex: Sertanejo"
+                      />
+                      <datalist id="genre-suggestions">
+                        {suggestions.genres.map(genre => <option key={genre} value={genre} />)}
+                      </datalist>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -737,17 +747,8 @@ const CMSView: React.FC<CMSViewProps> = ({
                     {/* ... Mood Analysis fields ... */}
                     <div className="flex items-center justify-between text-zinc-300 font-bold text-sm uppercase tracking-wider">
                       <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-brand-light" /> Mood Analysis
+                        <Activity className="w-4 h-4 text-brand-light" /> Análise de Mood
                       </div>
-                      <button
-                        type="button"
-                        onClick={suggestMoodWithAI}
-                        disabled={isAiLoading}
-                        className="text-[10px] flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 text-brand-light rounded-full hover:bg-brand/30 transition-all border border-brand/20 disabled:opacity-50"
-                      >
-                        {isAiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                        {isAiLoading ? 'Analisando...' : 'Sugerir com IA'}
-                      </button>
                     </div>
 
                     {/* Mood Presets */}

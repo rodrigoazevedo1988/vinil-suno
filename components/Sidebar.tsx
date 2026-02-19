@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Music, Disc, Heart, PlusSquare, Mic2, Settings, Sparkles, User, LogOut, Radio } from 'lucide-react';
+import { Home, Music, Disc, Heart, PlusSquare, Mic2, Settings, Sparkles, User, LogOut, Radio, LayoutGrid } from 'lucide-react';
 import { Playlist } from '../types';
 
 interface SidebarProps {
@@ -30,6 +30,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'home', icon: Home, label: 'Início' },
     { id: 'library', icon: Music, label: 'Minhas Músicas' },
+    { id: 'artists', icon: Mic2, label: 'Artistas' },
+    { id: 'albums', icon: Disc, label: 'Álbuns' },
+    { id: 'genres', icon: LayoutGrid, label: 'Gêneros' },
     { id: 'moods', icon: Sparkles, label: 'Moods' },
     { id: 'playlists', icon: Disc, label: 'Playlists' },
     { id: 'favorites', icon: Heart, label: 'Favoritas' },

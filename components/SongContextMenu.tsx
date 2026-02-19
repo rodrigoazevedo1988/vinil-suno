@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { MoreVertical, Download, Share2, ListPlus, Plus, PlayCircle, Check, Music, ChevronLeft } from 'lucide-react';
+import { MoreVertical, Download, Share2, ListPlus, Plus, PlayCircle, Check, Music, ChevronLeft, Edit2 } from 'lucide-react';
 import { Song, Playlist } from '../types';
 
 interface SongContextMenuProps {
@@ -9,6 +9,8 @@ interface SongContextMenuProps {
     onAddToQueue: (song: Song) => void;
     onAddToPlaylist: (songId: string, playlistId: string) => void;
     onCreatePlaylist: () => void;
+    onEditCMS?: (song: Song) => void;
+    isAdmin?: boolean;
     triggerClassName?: string;
 }
 
@@ -18,6 +20,8 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
     onAddToQueue,
     onAddToPlaylist,
     onCreatePlaylist,
+    onEditCMS,
+    isAdmin = false,
     triggerClassName = "text-zinc-400 hover:text-white"
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -139,6 +143,15 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
                         <Plus className="w-4 h-4" />
                         Adicionar à Playlist...
                     </button>
+                    {isAdmin && onEditCMS && (
+                        <button
+                            onClick={() => { onEditCMS(song); setIsOpen(false); }}
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-brand/10 text-brand font-bold border-t border-black/5 dark:border-white/5 transition-colors"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                            Editar Música (CMS)
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div className="flex flex-col py-1">

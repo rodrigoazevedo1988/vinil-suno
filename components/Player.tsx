@@ -56,7 +56,6 @@ const Player: React.FC<PlayerProps> = ({
     prevQueueLength.current = queueLength;
   }, [queueLength]);
   const [lyrics, setLyrics] = useState<string[]>([]);
-  const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
 
   // Scrubber State
   const [isDragging, setIsDragging] = useState(false);
@@ -70,28 +69,10 @@ const Player: React.FC<PlayerProps> = ({
     setLyrics([]);
     if (currentSong?.lyrics) {
       setLyrics(currentSong.lyrics.split('\n'));
-    } else if (showLyrics) {
-      generateLyrics();
     }
   }, [currentSong?.id, currentSong?.lyrics]);
 
-  const generateLyrics = async () => {
-    if (!currentSong) return;
-    setIsGeneratingLyrics(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Gere uma letra poética e rítmica para uma música chamada "${currentSong.title}" por "${currentSong.artist}". Mood: ${currentSong.mood.energy > 0.6 ? 'Enérgico' : 'Calmo'}. Divida em versos curtos.`
-      });
-      const lines = response.text?.split('\n').filter(l => l.trim().length > 0) || [];
-      setLyrics(lines);
-    } catch (err) {
-      setLyrics(["Erro ao conectar com a alma da IA...", "Tente novamente em instantes."]);
-    } finally {
-      setIsGeneratingLyrics(false);
-    }
-  };
+
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = Number(e.target.value);
@@ -240,7 +221,7 @@ const Player: React.FC<PlayerProps> = ({
                     onClick={() => setShowLyrics(!showLyrics)}
                     className={`absolute bottom-6 right-6 p-3 rounded-full backdrop-blur-md border border-white/10 transition-all z-10 ${showLyrics ? 'bg-brand text-white' : 'bg-black/40 text-white hover:bg-black/60'}`}
                   >
-                    <Sparkles className="w-5 h-5" />
+                    <ListMusic className="w-5 h-5" />
                   </button>
 
                   {/* Mini now-playing indicator on cover */}
@@ -332,12 +313,7 @@ const Player: React.FC<PlayerProps> = ({
                 {showLyrics ? (
                   <div className="h-full overflow-y-auto pr-4 scrollbar-thin animate-fade-in mask-image-gradient-b">
                     {/* Lyrics Content */}
-                    {isGeneratingLyrics ? (
-                      <div className="flex items-center gap-3 text-zinc-400 animate-pulse pt-4">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span className="text-sm font-bold uppercase tracking-wider">Gerando letras com IA...</span>
-                      </div>
-                    ) : lyrics.length > 0 ? (
+                    {lyrics.length > 0 ? (
                       <div className="space-y-4 pt-2 pb-10">
                         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest sticky top-0 bg-zinc-950/0 backdrop-blur-none mb-2">Letra da Música</h3>
                         {lyrics.map((line, i) => (
@@ -349,9 +325,6 @@ const Player: React.FC<PlayerProps> = ({
                     ) : (
                       <div className="flex flex-col items-start gap-4 pt-4">
                         <h3 className="text-xl font-bold text-zinc-300">Letra indisponível</h3>
-                        <button onClick={generateLyrics} className="px-5 py-2 bg-brand text-white rounded-full font-bold text-xs uppercase tracking-widest hover:bg-brand-light transition-all flex items-center gap-2">
-                          <Sparkles className="w-3 h-3" /> Gerar com IA
-                        </button>
                       </div>
                     )}
                   </div>
@@ -519,11 +492,14 @@ const Player: React.FC<PlayerProps> = ({
             </div>
 
             <button
-              onClick={() => setShowLyrics(!showLyrics)}
-              title="Ver Letras (IA)"
+              onClick={() => {
+                setShowLyrics(true);
+                if (!isExpanded) onToggleExpand();
+              }}
+              title="Ver Letras"
               className={`p-2.5 rounded-lg transition-all duration-200 hover:scale-[1.1] active:scale-[0.98] ${showLyrics && !isExpanded ? 'bg-brand text-white shadow-[0_0_15px_rgba(var(--brand-primary-rgb),0.5)]' : 'text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
             >
-              <Sparkles className="w-4.5 h-4.5" />
+              <Mic2 className="w-4.5 h-4.5" />
             </button>
 
             <div className="hidden sm:flex items-center gap-2 w-24 group/vol relative">
